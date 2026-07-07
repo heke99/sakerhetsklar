@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { loadRules } from "@/lib/rule-engine/service";
 import { runSignificanceEngine } from "@/lib/significance/engine";
+import { createDeadlinesForIncident } from "@/lib/services/deadlines";
 import type { Facts } from "@/lib/rule-engine/types";
 
 const PTS_SECTORS = [
@@ -140,6 +141,16 @@ export async function assessIncidentSignificance(
     incidentUpdate.identified_as_significant_at = new Date().toISOString();
   }
   await admin.from("incidents").update(incidentUpdate).eq("id", input.incidentId);
+
+  // Activate legal + SLA deadlines once the incident is identified as
+  // significant (or requires review).
+  if (incidentUpdate.identified_as_significant_at || incident.identified_as_significant_at) {
+    await createDeadlinesForIncident({
+      tenantId: input.tenantId,
+      incidentId: input.incidentId,
+      actorUserId: actor.userId,
+    });
+  }
 
   // Open parallel tracks.
   const tracks: { code: string; reason: string }[] = [];
