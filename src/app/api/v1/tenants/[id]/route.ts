@@ -1,0 +1,89 @@
+import { z } from "zod";
+
+import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
+import {
+  hasPlatformRole,
+  hasTenantRole,
+  isPlatformAdmin,
+  isTenantMember,
+} from "@/lib/authz/context";
+import { getAdminClient } from "@/lib/server/supabase-admin";
+import { writeAuditLog } from "@/lib/audit/log";
+
+export const GET = withApi<{ id: string }>(async (_req, { actor, params }) => {
+  if (!isPlatformAdmin(actor) && !isTenantMember(actor, params.id)) {
+    throw forbidden();
+  }
+  const admin = getAdminClient();
+  const { data, error } = await admin
+    .from("tenants")
+    .select("*, tenant_settings(*)")
+    .eq("id", params.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw notFound("Tenant not found");
+  return ok(data);
+});
+
+const updateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  status: z.enum(["active", "paused", "disabled"]).optional(),
+  plan: z.enum(["starter", "business", "enterprise"]).optional(),
+  deploymentModel: z
+    .enum(["multi_tenant", "single_tenant", "customer_owned"])
+    .optional(),
+  primaryContactName: z.string().max(200).nullable().optional(),
+  primaryContactEmail: z.string().email().nullable().optional(),
+});
+
+export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
+  const isPlatform = hasPlatformRole(actor, ["platform_owner", "platform_admin"]);
+  const isTenantAdmin = hasTenantRole(actor, params.id, ["tenant_admin"]);
+  if (!isPlatform && !isTenantAdmin) throw forbidden();
+
+  const input = await parseBody(req, updateSchema);
+
+  // Plan, status and deployment model changes are platform-level decisions.
+  if ((input.plan || input.status || input.deploymentModel) && !isPlatform) {
+    throw forbidden("Plan, status and deployment model are managed by the platform");
+  }
+
+  const admin = getAdminClient();
+  const { data: previous } = await admin
+    .from("tenants")
+    .select("name, status, plan, deployment_model")
+    .eq("id", params.id)
+    .maybeSingle();
+  if (!previous) throw notFound("Tenant not found");
+
+  const update: Record<string, unknown> = { updated_by: actor.userId };
+  if (input.name !== undefined) update.name = input.name;
+  if (input.status !== undefined) update.status = input.status;
+  if (input.plan !== undefined) update.plan = input.plan;
+  if (input.deploymentModel !== undefined) update.deployment_model = input.deploymentModel;
+  if (input.primaryContactName !== undefined) update.primary_contact_name = input.primaryContactName;
+  if (input.primaryContactEmail !== undefined) update.primary_contact_email = input.primaryContactEmail;
+
+  const { data, error } = await admin
+    .from("tenants")
+    .update(update)
+    .eq("id", params.id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  await writeAuditLog({
+    tenantId: params.id,
+    actorUserId: actor.userId,
+    action: input.deploymentModel
+      ? "tenant.deployment_model_changed"
+      : "tenant.updated",
+    entityType: "tenant",
+    entityId: params.id,
+    previousValue: previous,
+    newValue: update,
+  });
+
+  return ok(data);
+});

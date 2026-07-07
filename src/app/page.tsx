@@ -5,7 +5,7 @@ export default function HomePage() {
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center px-6 text-center">
         <p className="mb-4 rounded-full border border-slate-700 px-4 py-1 text-sm text-slate-300">
-          NIS2 Control Center
+          Säkerhetsklar
         </p>
 
         <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl">

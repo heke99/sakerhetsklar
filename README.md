@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Säkerhetsklar
 
-## Getting Started
+Säkerhetsklar is a rule-driven SaaS and enterprise/public-sector compliance platform for
+Swedish organizations covered by the Swedish Cybersecurity Act (Cybersäkerhetslagen 2025:1506)
+and NIS2.
 
-First, run the development server:
+Säkerhetsklar provides decision support. Final legal and regulatory responsibility remains
+with the organization.
+
+## What the platform does
+
+- Determines whether an organization is likely covered by the Cybersecurity Act / NIS2.
+- Classifies the organization as essential, important, public-sector or manual-review-required.
+- Maps sectors, subsectors and supervisory authorities.
+- Builds the digital environment and critical service register (CMDB).
+- Manages NIS2 readiness controls, evidence and readiness scores.
+- Manages suppliers and supply-chain risk.
+- Manages incidents, war rooms, tasks and timelines.
+- Assesses whether an incident is significant/reportable via a versioned rule engine.
+- Creates reporting drafts for Cyberportalen/NCSC (copy mode, PDF/Word export).
+- Tracks 24h / 72h / final-report / situation-report deadlines with escalations.
+- Handles GDPR/IMY, PTS/EU, eIDAS, state-agency, contractual and insurance reporting tracks.
+- Stores evidence with hashes, access logs and chain of custody.
+- Prepares supervisory audit packages and procurement/security/exit packages.
+- Provides a Swedish-first UI for customers and a full platform view for superadmin.
+
+## Tech stack
+
+- Next.js App Router, TypeScript (strict), Tailwind CSS, shadcn/ui-style components.
+- Supabase/Postgres, Supabase Auth, SQL migrations, RLS.
+- Server-side API layer under `/api/v1` — the frontend never performs sensitive
+  operations directly against Supabase and service role keys are never exposed to the client.
+- Vitest for tests.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Environment variables (see `.env.example`):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL (safe to expose).
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — publishable key (safe to expose).
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only. Never expose to the frontend.
+- `SUPABASE_DB_URL` — server-only connection string used by migrations/tests.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run database migrations with the Supabase CLI:
 
-## Learn More
+```bash
+supabase db push        # or apply files in supabase/migrations in order
+```
 
-To learn more about Next.js, take a look at the following resources:
+Seed data (no real PII) lives in `supabase/seed`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `pnpm dev` — development server.
+- `pnpm build` — production build.
+- `pnpm lint` — lint.
+- `pnpm typecheck` — strict TypeScript check.
+- `pnpm test` — run tests.
 
-## Deploy on Vercel
+## Documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+See [docs/](docs/) — architecture, rule engine, data model, RLS/security, tenant resolver,
+deployment models (multi-tenant, single-tenant, customer-owned data plane), onboarding,
+incident and reporting flows, Cyberportalen copy mode, procurement/GDPR/exit packages,
+accessibility, and runbooks.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Key principles:
+
+- All legal/rule logic goes through a versioned rule engine stored in the database.
+  Rules are never hardcoded in the frontend.
+- Rules that are not final are marked `draft`, `pending_guidance`, `partial` or
+  `manual_review_required` — never guessed.
+- The Cyberportalen API is not assumed in MVP; reporting is copy/export based.
+- Security-classified information must not be uploaded unless the deployment and
+  handling process are approved for that information.

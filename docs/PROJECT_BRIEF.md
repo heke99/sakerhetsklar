@@ -1,8 +1,10 @@
-# NIS2 Control Center
+# Säkerhetsklar
 
-This is a Swedish NIS2 / Cybersecurity Act compliance, readiness and incident reporting platform.
+Säkerhetsklar is a Swedish NIS2 / Cybersecurity Act compliance, readiness, incident
+management and reporting platform.
 
-The product must help organizations:
+The product helps organizations:
+
 - determine whether they are covered by the Swedish Cybersecurity Act / NIS2,
 - classify as essential, important, public-sector, or manual review required,
 - map sectors and supervisory authorities,
@@ -18,9 +20,12 @@ The product must help organizations:
 - provide clear UI for customers and superadmin.
 
 Core principle:
-Rules must be versioned and stored in the database. Do not hardcode legal logic in the frontend.
+Rules must be versioned and stored in the database. Do not hardcode legal logic in the
+frontend. Säkerhetsklar provides decision support — final legal and regulatory
+responsibility remains with the organization.
 
 Main modules:
+
 1. Tenant/platform foundation
 2. Superadmin
 3. Rule engine
