@@ -379,9 +379,10 @@ create policy tenant_memberships_select on public.tenant_memberships
 create policy tenants_member_select on public.tenants
   for select using (app.can_access_tenant(id) or app.is_platform_admin());
 
--- legal_entities: tenant scoped.
+-- legal_entities: tenant scoped. Platform admins do NOT get blanket access to
+-- tenant business data — support access must be requested and approved.
 create policy legal_entities_tenant_select on public.legal_entities
-  for select using (app.can_access_tenant(tenant_id) or app.is_platform_admin());
+  for select using (app.can_access_tenant(tenant_id));
 create policy legal_entities_tenant_write on public.legal_entities
   for all using (app.has_tenant_role(tenant_id, array['tenant_admin', 'ciso', 'legal_compliance']))
   with check (app.has_tenant_role(tenant_id, array['tenant_admin', 'ciso', 'legal_compliance']));
