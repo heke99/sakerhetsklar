@@ -85,6 +85,8 @@ export default async function IncidentDetailPage({
     due_at: string;
     status: string;
   }>;
+  // Server component renders once per request; wall-clock read is intentional.
+  // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
 
   return (
