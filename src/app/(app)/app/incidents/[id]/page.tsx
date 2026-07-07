@@ -85,6 +85,7 @@ export default async function IncidentDetailPage({
     due_at: string;
     status: string;
   }>;
+  const nowMs = Date.now();
 
   return (
     <main className="p-8">
@@ -156,7 +157,7 @@ export default async function IncidentDetailPage({
                       ? "red"
                       : d.status === "met"
                         ? "green"
-                        : new Date(d.due_at).getTime() - Date.now() < 6 * 3600_000
+                        : new Date(d.due_at).getTime() - nowMs < 6 * 3600_000
                           ? "yellow"
                           : "blue"
                   }
