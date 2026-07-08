@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
-import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -30,72 +31,115 @@ export function LoginForm() {
 
   async function onSubmit(values: FormValues) {
     setError(null);
+
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
     if (!url || !anonKey) {
       setError("Miljön är inte konfigurerad. Kontakta administratören.");
       return;
     }
+
     const supabase = createBrowserClient(url, anonKey);
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: values.email,
       password: values.password,
     });
+
     if (signInError) {
-      setError("Fel e-postadress eller lösenord.");
+      setError("Fel e-postadress eller lösenord. Kontrollera uppgifterna och försök igen.");
       return;
     }
+
     router.push(searchParams.get("next") ?? "/app/overview");
     router.refresh();
   }
 
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="space-y-4 rounded-xl border bg-card p-6 shadow-sm"
-      noValidate
-    >
-      <div className="space-y-1.5">
-        <Label htmlFor="email">E-postadress</Label>
-        <Input
-          id="email"
-          type="email"
-          autoComplete="email"
-          aria-invalid={Boolean(errors.email)}
-          {...register("email")}
-        />
-        {errors.email ? (
-          <p role="alert" className="text-sm text-destructive">
-            {errors.email.message}
-          </p>
+    <div className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="email" className="text-slate-800">
+            E-postadress
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="namn@organisation.se"
+            aria-invalid={Boolean(errors.email)}
+            className="h-11 border-slate-300 bg-white px-3 text-slate-950 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-blue-600/20"
+            {...register("email")}
+          />
+          {errors.email ? (
+            <p role="alert" className="text-sm text-destructive">
+              {errors.email.message}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="password" className="text-slate-800">
+              Lösenord
+            </Label>
+            <Link href="#" className="text-sm font-medium text-blue-700 hover:text-blue-900">
+              Glömt lösenord?
+            </Link>
+          </div>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Ange lösenord"
+            aria-invalid={Boolean(errors.password)}
+            className="h-11 border-slate-300 bg-white px-3 text-slate-950 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-blue-600/20"
+            {...register("password")}
+          />
+          {errors.password ? (
+            <p role="alert" className="text-sm text-destructive">
+              {errors.password.message}
+            </p>
+          ) : null}
+        </div>
+
+        {error ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+            {error}
+          </div>
         ) : null}
+
+        <Button type="submit" disabled={isSubmitting} className="h-11 w-full text-sm font-semibold">
+          {isSubmitting ? "Loggar in…" : "Logga in"}
+        </Button>
+      </form>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+          <div className="w-full border-t border-slate-200" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase tracking-[0.18em]">
+          <span className="bg-white px-3 text-slate-500">Enterprise</span>
+        </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="password">Lösenord</Label>
-        <Input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          aria-invalid={Boolean(errors.password)}
-          {...register("password")}
-        />
-        {errors.password ? (
-          <p role="alert" className="text-sm text-destructive">
-            {errors.password.message}
-          </p>
-        ) : null}
-      </div>
-
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-
-      <Button type="submit" disabled={isSubmitting} className="w-full">
-        {isSubmitting ? "Loggar in…" : "Logga in"}
+      <Button
+        type="button"
+        variant="outline"
+        disabled
+        className="h-11 w-full border-slate-300 bg-slate-50 text-slate-500"
+        aria-disabled="true"
+      >
+        Fortsätt med Entra ID — kommer snart
       </Button>
-    </form>
+
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+        Åtkomst loggas. Använd inte delade konton. Kontakta administratör om du saknar behörighet eller rätt tenant.
+      </div>
+
+      <p className="text-center text-sm text-slate-500">
+        Problem att logga in? Kontakta er tenant-administratör eller plattformsansvarig.
+      </p>
+    </div>
   );
 }
