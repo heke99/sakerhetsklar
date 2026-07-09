@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and contract tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Dependency audit (fail on high/critical)
+        run: npm audit --audit-level=high
+
+  database-tests:
+    name: Migrations, seeds and RLS tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply migrations + seeds and run SQL test suites
+        env:
+          DB_NAME: sakerhetsklar_test
+          DB_SUPERUSER_CMD: psql -h localhost -U postgres
+          PGPASSWORD: postgres
+        run: bash scripts/db-test.sh
+
+# Migrations 0001–0018 are strictly ordered and applied exactly once
+      # (supabase CLI tracks applied migrations). Migrations from 0019 onward
+      # are written to be idempotent — verify by re-applying them.
+      - name: Verify idempotency of migrations 0019+
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for f in supabase/migrations/00{19,2,3,4,5,6,7,8,9}*.sql; do
+            [ -e "$f" ] || continue
+            echo "re-applying ${f}"
+            psql -h localhost -U postgres -d sakerhetsklar_test -v ON_ERROR_STOP=1 -q -f "${f}"
+          done

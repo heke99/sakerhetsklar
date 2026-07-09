@@ -179,6 +179,20 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 16 — CI/CD, migration tests and dependency security
+
+### CI (`.github/workflows/ci.yml`)
+
+- **build-and-test** job: `npm ci` → typecheck → lint → unit + contract tests → production build → `npm audit --audit-level=high` (blocks on high/critical).
+- **database-tests** job: Postgres 16 service container, runs `scripts/db-test.sh` (shim + all migrations + all seeds + the three SQL test suites: tenant isolation, support access, tenant integrity), then re-applies migrations 0019+ to verify idempotency (verified locally too: 0019–0023 re-apply cleanly). Migrations 0001–0018 are strictly ordered/apply-once (documented in the workflow).
+
+### Dependency security
+
+- Dependabot config: weekly grouped npm updates + GitHub Actions updates.
+- `docs/security/dependency-audit.md`: `npm audit` = **0 high/critical**; the 2 moderate advisories (`postcss` via next, `uuid` via exceljs) documented with severity, path, impact assessment ("not exploitable in this product") and decision (accept; forced fixes are breaking downgrades). Review process defined.
+
+---
+
 ## Batch 15 — Billing, plans and entitlements
 
 ### Entitlement engine
