@@ -179,6 +179,22 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 8 — Scope assessment, onboarding and customer readiness
+
+### Changes
+
+- Migration `0021_onboarding_contacts.sql`: structured onboarding facts on `tenant_settings` — incident contact, reporting contact, management owner, DPO contact, SSO requirement preference, data-residency requirement, deployment model preference.
+- New `PUT /api/v1/onboarding` saves the contact/requirement facts (tenant admin/CISO only, audited).
+- New `GET/POST /api/v1/legal-entities` (tenant-scoped, audited) so the previously hollow legal-entities step can capture real data.
+- **Onboarding wizard filled in**:
+  - Legal entities step: lists existing entities + inline quick-add form (name/orgnr).
+  - Incident roles step: live checklist of the six incident roles against actual `role_assignments` (green/missing indicators), plus a full contact form (incident/reporting/management/DPO) and requirement preferences (data residency, deployment model with "kräver provisionering" labels, SSO). Saving contacts is required to complete the step.
+  - Systems/vendors steps: live counts from the register with warnings when empty.
+  - Completion step: NIS2-readiness score and register counts before finishing.
+- Onboarding page now loads via the data-plane abstraction and passes readiness (`computeReadiness`) into the wizard; dashboard already reflects `tenants.onboarding_status`, which the POST endpoint recomputes on every step change.
+
+---
+
 ## Batch 7 — Rule engine and legal source management
 
 ### Source verification (data-driven, versioned)

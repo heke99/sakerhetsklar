@@ -99,3 +99,66 @@ export const POST = withApi(async (req, { actor }) => {
 
   return ok(data);
 });
+
+const contactsSchema = z.object({
+  tenantId: z.string().uuid(),
+  incidentContactName: z.string().max(200).nullable().optional(),
+  incidentContactEmail: z.string().email().nullable().optional(),
+  reportingContactName: z.string().max(200).nullable().optional(),
+  reportingContactEmail: z.string().email().nullable().optional(),
+  managementOwnerName: z.string().max(200).nullable().optional(),
+  dpoContactName: z.string().max(200).nullable().optional(),
+  dpoContactEmail: z.string().email().nullable().optional(),
+  ssoRequiredPreference: z.boolean().nullable().optional(),
+  dataResidencyRequirement: z.string().max(500).nullable().optional(),
+  deploymentModelPreference: z
+    .enum(["multi_tenant", "single_tenant", "customer_owned"])
+    .nullable()
+    .optional(),
+});
+
+/** Saves structured onboarding contacts/requirements to tenant settings. */
+export const PUT = withApi(async (req, { actor }) => {
+  const input = await parseBody(req, contactsSchema);
+  if (!hasTenantRole(actor, input.tenantId, ["tenant_admin", "ciso"])) {
+    throw forbidden();
+  }
+
+  const admin = getAdminClient();
+  const update: Record<string, unknown> = { tenant_id: input.tenantId };
+  const map: [keyof typeof input, string][] = [
+    ["incidentContactName", "incident_contact_name"],
+    ["incidentContactEmail", "incident_contact_email"],
+    ["reportingContactName", "reporting_contact_name"],
+    ["reportingContactEmail", "reporting_contact_email"],
+    ["managementOwnerName", "management_owner_name"],
+    ["dpoContactName", "dpo_contact_name"],
+    ["dpoContactEmail", "dpo_contact_email"],
+    ["ssoRequiredPreference", "sso_required_preference"],
+    ["dataResidencyRequirement", "data_residency_requirement"],
+    ["deploymentModelPreference", "deployment_model_preference"],
+  ];
+  for (const [from, to] of map) {
+    if (input[from] !== undefined) update[to] = input[from];
+  }
+
+  const { data, error } = await admin
+    .from("tenant_settings")
+    .upsert(update, { onConflict: "tenant_id" })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  await writeAuditLog({
+    tenantId: input.tenantId,
+    actorUserId: actor.userId,
+    action: "onboarding.contacts_updated",
+    entityType: "tenant_settings",
+    entityId: input.tenantId,
+    newValue: Object.fromEntries(
+      Object.entries(update).filter(([k]) => k !== "tenant_id"),
+    ),
+  });
+
+  return ok(data);
+});
