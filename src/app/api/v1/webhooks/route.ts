@@ -1,14 +1,13 @@
 import { z } from "zod";
 
-import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
+import { withApi, ok, parseBody, forbidden, requireTenantIdParam } from "@/lib/api/handler";
 import { hasTenantRole } from "@/lib/authz/context";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import { enqueueWebhookEvent } from "@/lib/services/webhooks";
 
 export const GET = withApi(async (req, { actor }) => {
-  const tenantId = req.nextUrl.searchParams.get("tenantId");
-  if (!tenantId) throw notFound("tenantId is required");
+  const tenantId = requireTenantIdParam(req);
   if (!hasTenantRole(actor, tenantId, ["tenant_admin"])) throw forbidden();
 
   const admin = getAdminClient();

@@ -84,6 +84,20 @@ export function withApi<P = Record<string, string>>(handler: Handler<P>) {
   };
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validated `tenantId` query parameter: required and must be a UUID.
+ * Malformed ids get 400 instead of reaching the database layer.
+ */
+export function requireTenantIdParam(req: NextRequest): string {
+  const tenantId = req.nextUrl.searchParams.get("tenantId");
+  if (!tenantId) throw badRequest("tenantId is required");
+  if (!UUID_RE.test(tenantId)) throw badRequest("tenantId must be a UUID");
+  return tenantId;
+}
+
 export async function parseBody<T>(req: NextRequest, schema: ZodType<T>): Promise<T> {
   let json: unknown;
   try {

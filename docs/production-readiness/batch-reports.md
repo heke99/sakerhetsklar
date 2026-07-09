@@ -179,6 +179,23 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 14 — API, OpenAPI and integration contract
+
+### OpenAPI
+
+- Document extracted to `src/lib/api/openapi.ts` (route serves it unchanged) and extended with all endpoints added in batches 4–13: invitation lookup/accept (public + rate limits), member/invitation PATCH, legal entities, notifications, onboarding PUT, and the OpenAPI endpoint itself.
+- `info.description` now documents: auth model, tenant scoping (404-without-existence-leak semantics), the uniform error format, pagination behavior, rate limits, file upload/download, job-endpoint security (both header conventions) and outbound webhook signing (HMAC over `timestamp.body`, retry policy).
+
+### Contract tests
+
+`src/lib/api/openapi.test.ts` walks `src/app/api/v1/**/route.ts`, extracts implemented HTTP methods and asserts **bidirectional** consistency: every route documented with exactly its implemented methods, and no documented path without an implementation. Route/spec drift now fails CI. (+121 assertions; 255 tests total.)
+
+### Input validation
+
+New `requireTenantIdParam(req)` in the API handler: `tenantId` query params are now validated as UUIDs (400 on malformed input) across 22 list routes — previously raw strings reached the query layer. Body validation was already Zod-based on all JSON routes.
+
+---
+
 ## Batch 13 — Jobs, notifications, escalation and schedulers
 
 ### Scheduling

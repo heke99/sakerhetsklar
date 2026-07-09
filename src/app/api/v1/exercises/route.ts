@@ -1,13 +1,12 @@
 import { z } from "zod";
 
-import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
+import { withApi, ok, parseBody, forbidden, notFound, requireTenantIdParam } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
 import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 
 export const GET = withApi(async (req, { actor }) => {
-  const tenantId = req.nextUrl.searchParams.get("tenantId");
-  if (!tenantId) throw notFound("tenantId is required");
+  const tenantId = requireTenantIdParam(req);
   if (!isTenantMember(actor, tenantId)) throw forbidden();
 
   const admin = await getTenantDataPlaneClient(tenantId);

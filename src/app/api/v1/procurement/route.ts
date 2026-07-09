@@ -1,4 +1,4 @@
-import { withApi, forbidden, notFound } from "@/lib/api/handler";
+import { withApi, forbidden, requireTenantIdParam } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
 import { assertSupportAccessAllows } from "@/lib/authz/support-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
@@ -6,8 +6,7 @@ import { writeAuditLog } from "@/lib/audit/log";
 import { buildProcurementPackage } from "@/lib/exports/procurement";
 
 export const GET = withApi(async (req, { actor, meta }) => {
-  const tenantId = req.nextUrl.searchParams.get("tenantId");
-  if (!tenantId) throw notFound("tenantId is required");
+  const tenantId = requireTenantIdParam(req);
   await assertSupportAccessAllows(actor, tenantId, "export");
   if (!hasPermission(actor, tenantId, "procurement.generate")) {
     throw forbidden("procurement.generate permission required");
