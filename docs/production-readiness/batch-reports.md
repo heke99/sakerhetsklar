@@ -2,6 +2,78 @@
 
 Working branch: `cursor/production-readiness-1651`.
 
+## Batch 22 — Final go-live gate (FINAL REPORT)
+
+### Required final commands — all green (clean install, 2026-07-09)
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | Green |
+| `npm run typecheck` | Green (strict) |
+| `npm run test` | Green — 17 files, **263 tests** (was 80 at baseline) |
+| `npm run lint` | Green — 0 errors, 0 warnings |
+| `npm run build` | Green — zero warnings, no network required |
+| `npm run db:test` | Green — 4 SQL suites (isolation, support access, tenant integrity, journeys) on Postgres 16 |
+| `npm audit` | **0 high/critical**; 4 moderate (2 advisories, transitive) — documented with impact + decision in `docs/security/dependency-audit.md` |
+
+### 1. Summary of what was fixed
+
+Security (P0): cross-tenant write IDOR closed on ~15 routes via reusable tenant guards; 100 composite tenant FKs + `unique(tenant_id,id)` on 23 parents + `tenant_id` on 4 join tables make cross-tenant relations impossible at the DB level; unauthorized break-glass termination fixed; support-access scopes (evidence/export/read-write) enforced and logged incl. denials; evidence file policy + malware hook (fail closed); legal hold blocks deletion via DB triggers.
+
+Auth (P0): working password reset, complete invite flow (hashed tokens, no raw tokens in production APIs, e-mail delivery fail-closed), open-redirect fix, rate limiting, SSO/MFA tenant policies enforced fail-closed, full user-management UI for tenant and platform admins.
+
+Model A/B/C (P0): data-plane abstraction with hard fail-closed behavior for unprovisioned B/C planes (no central fallback, memberships dropped at the identity layer), provisioning + entitlement gates on model switching.
+
+Product: onboarding completed (contacts, legal entities, role checklist, requirement capture), report workflow controls (approval before submission, submission reference or documented override, deadline-met coupling), notifications (in-app inbox, webhooks on domain events, Teams, e-mail), entitlement engine enforced in API + UI, platform admin operational UI (create/plan/suspend/deployment/support access/invite/delete), Swedish labels everywhere, landing page demo copy removed, loading/error states, accessibility pass.
+
+Ops: `.env.example` + startup validation, db scripts with demo-seed production guard, CI with DB/RLS testing + idempotency check, Dependabot, readiness endpoint, structured logging, cron config, docs synced + go-live checklist + customer security overview.
+
+Legal: rule sources verified against official sources (riksdagen.se, mcf.se, EUR-Lex) with URLs + `last_verified_at` in the DB; MCFFS publisher corrected (MCF, not MSB); hardcoded frontend legal copy made data-driven; disclaimer coverage completed.
+
+### 2. Batch-by-batch status
+
+All 22 batches complete — see the individual sections below (newest first after this one).
+
+### 3. Files changed
+
+163 files, +8 931 / −8 244 lines, across 21 commits (each batch is a commit).
+
+### 4. Migrations added
+
+`0019_tenant_integrity.sql` (composite FKs, join-table tenant_id), `0020_rule_verification.sql`, `0021_onboarding_contacts.sql`, `0022_submission_reference.sql`, `0023_legal_hold_guard.sql`. Seeds: `0013_seed_source_verification.sql`, `0014_seed_entitlement_matrix.sql`. All 0019+ migrations verified idempotent.
+
+### 5. Tests added
+
+Vitest: 80 → 263 (tenant guards, data plane, auth policy, entitlements, report transitions, evidence file policy, job auth, rate limit, safe-next, OpenAPI contract suite). SQL: 2 → 4 suites (added tenant integrity + journeys).
+
+### 6. Remaining risks
+
+- **SSO login is not implemented** — it is correctly fail-closed (required-SSO tenants block password login; nothing advertised), but enterprise Entra ID/SAML sign-in requires an implementation project.
+- **MFA enrollment UI is not implemented** — MFA-required tenants block sub-AAL2 sessions (fail closed) but users cannot self-enroll in-app yet.
+- **Model B/C provisioning is manual** — the fail-closed architecture is implemented and tested; per-plane migration/seed orchestration remains an operational runbook task. RSC read paths outside refactored services still assume Model A; unready B/C tenants are fully blocked so no data can leak, but a provisioned B/C rollout should include a review of remaining `getAdminClient` read paths.
+- **Rate limiting is per-instance** (in-memory); put a WAF/proxy limit in front for strict global limits.
+- **Stripe/billing payments not connected** (schema + entitlements only, by design); complimentary access via audited overrides.
+- 4 moderate `npm audit` findings (transitive; not exploitable in this product; documented).
+
+### 7. Out of scope (known)
+
+Cyberportalen API integration (copy/export mode is the designed MVP), SCIM provisioning, Sentry SDK integration (env reserved), automated retention purge job (blocked from deleting held evidence by DB triggers regardless).
+
+### 8. Deployment instructions
+
+See README ("Getting started", "Production deployment notes") and `docs/go-live-checklist.md`. In short: set all required env vars (startup fails fast otherwise), `npm run db:migrate`, `npm run db:seed` (never `SEED_DEMO=1`), `npm run build`, configure scheduler (`vercel.json` crons with `CRON_SECRET=JOB_RUNNER_SECRET`), verify `/api/v1/health/readiness`.
+
+### 9. Go-live recommendation
+
+**Ready with conditions.** All P0 items are complete, the required commands are green, and no known cross-tenant or fail-open path remains. Conditions before selling/enabling specific capabilities:
+
+1. Sell SSO/MFA only as "provisioning-required" until sign-in/enrollment is built (currently fail-closed, not bypassable).
+2. Onboard Model B/C customers only with the per-plane provisioning runbook executed (unprovisioned planes are hard-blocked).
+3. Configure the e-mail provider in production (invitations intentionally fail closed without it).
+4. Complete one backup/restore test and the go-live checklist for the specific environment.
+
+---
+
 ## Batch 0 — Repository audit and baseline report
 
 ### Commands run (baseline)
