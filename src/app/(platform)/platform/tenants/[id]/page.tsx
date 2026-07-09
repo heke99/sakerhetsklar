@@ -13,6 +13,8 @@ import {
 import { requirePlatformRole } from "@/lib/services/require-platform";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
+import { TenantAdminActions } from "./tenant-admin-actions";
+
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tenant profile" };
 
@@ -25,34 +27,53 @@ export default async function TenantProfilePage({
   const { id } = await params;
   const admin = getAdminClient();
 
-  const [tenantRes, domainsRes, readinessRes, ruleVersionsRes, supportRes, deploymentRes] =
-    await Promise.all([
-      admin
-        .from("tenants")
-        .select("*, control_plane_tenants(*)")
-        .eq("id", id)
-        .is("deleted_at", null)
-        .maybeSingle(),
-      admin.from("tenant_domains").select("*").eq("tenant_id", id),
-      admin.from("tenant_production_readiness").select("*").eq("tenant_id", id).order("gate_code"),
-      admin
-        .from("tenant_rule_package_versions")
-        .select("*")
-        .eq("tenant_id", id)
-        .eq("status", "active"),
-      admin
-        .from("support_access_requests")
-        .select("*")
-        .eq("tenant_id", id)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      admin
-        .from("tenant_deployment_models")
-        .select("*")
-        .eq("tenant_id", id)
-        .order("effective_from", { ascending: false })
-        .limit(5),
-    ]);
+  const [
+    tenantRes,
+    domainsRes,
+    readinessRes,
+    ruleVersionsRes,
+    supportRes,
+    deploymentRes,
+    invitationsRes,
+    membersCountRes,
+  ] = await Promise.all([
+    admin
+      .from("tenants")
+      .select("*, control_plane_tenants(*)")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    admin.from("tenant_domains").select("*").eq("tenant_id", id),
+    admin.from("tenant_production_readiness").select("*").eq("tenant_id", id).order("gate_code"),
+    admin
+      .from("tenant_rule_package_versions")
+      .select("*")
+      .eq("tenant_id", id)
+      .eq("status", "active"),
+    admin
+      .from("support_access_requests")
+      .select("*")
+      .eq("tenant_id", id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    admin
+      .from("tenant_deployment_models")
+      .select("*")
+      .eq("tenant_id", id)
+      .order("effective_from", { ascending: false })
+      .limit(5),
+    admin
+      .from("tenant_invitations")
+      .select("id, email, role_code, status, expires_at")
+      .eq("tenant_id", id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    admin
+      .from("tenant_memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", id)
+      .eq("status", "active"),
+  ]);
 
   const tenant = tenantRes.data;
   if (!tenant) notFound();
@@ -95,7 +116,25 @@ export default async function TenantProfilePage({
             <dt className="text-muted-foreground">Slug</dt>
             <dd className="font-medium">{tenant.slug ?? "–"}</dd>
           </div>
+          <div>
+            <dt className="text-muted-foreground">Active members</dt>
+            <dd className="font-medium">{membersCountRes.count ?? 0}</dd>
+          </div>
         </dl>
+      </section>
+
+      <section className="mb-8 rounded-xl border bg-card p-5">
+        <h2 className="mb-3 text-lg font-semibold">Invitations</h2>
+        <TenantAdminActions
+          tenantId={id}
+          invitations={(invitationsRes.data ?? []).map((inv) => ({
+            id: inv.id as string,
+            email: inv.email as string,
+            roleCode: inv.role_code as string,
+            status: inv.status as string,
+            expiresAt: inv.expires_at as string,
+          }))}
+        />
       </section>
 
       <section className="mb-8">

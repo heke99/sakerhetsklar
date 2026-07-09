@@ -93,6 +93,36 @@ P2:
 `typecheck`, `lint`, `build` green.
 
 ---
+## Batch 4 — Authentication, login, password reset and invite flow (P0)
+
+### Login
+
+- **Open redirect fixed**: `safeNextPath()` (`src/lib/auth/safe-next.ts`, unit-tested) only allows same-origin relative paths; `//evil`, `https://evil` and backslash tricks fall back to `/app/overview`.
+- "Glömt lösenord?" now links to a working `/reset-password`.
+- The fake "Entra ID — kommer snart" button and English "Enterprise" divider removed (SSO handled fail-closed in Batch 5).
+
+### Password reset
+
+New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `resetPasswordForEmail`, uniform "if the address exists" message — no account enumeration) and update phase (handles `code`/`token_hash` recovery params + `PASSWORD_RECOVERY` event, 12+ char requirement, Swedish copy).
+
+### Invite flow
+
+- New `src/lib/services/invitations.ts`: hashed tokens (SHA-256, 7-day TTL), single-live-invitation per address, verify (pending + unexpired + tenant active, auto-marks expired), accept (existing account → must be logged in as invitee; new account → created server-side with `email_confirm: true` since the link proves mailbox access), revoke, resend. All audited.
+- **Raw tokens are no longer returned by production APIs.** In production, invitation creation **fails closed with 503** when no email provider is configured; the invite link is only included in dev responses. Email delivery via new `src/lib/server/email.ts` (Resend REST; no mock success).
+- Public endpoints `POST /api/v1/invitations/lookup` and `/accept` (uniform 404 for invalid tokens, per-IP rate limited via new `src/lib/server/rate-limit.ts`).
+- New `/invite/accept?token=` page: shows tenant/role/email, password setup for new users, login redirect for existing users, auto sign-in after account creation.
+
+### User management UI
+
+- **Tenant settings** (`/app/settings`): invite user with role select, pending invitations with resend/revoke (confirmation dialogs), member role change and deactivation (blocked for your own account), permission-aware (visible to tenant admins/platform admins only). Backed by new `PATCH /tenants/[id]/members` (`set_role` replaces roles, `deactivate` removes membership + revokes assignments — both audited) and `PATCH /tenants/[id]/invitations`.
+- **Platform admin**: "Create tenant" form on `/platform/tenants` (name/slug/orgnr/type/plan/contact) and an Invitations section on the tenant profile with invite-first-admin, resend, revoke.
+
+### Tests
+
+`safe-next.test.ts` (open-redirect matrix), `rate-limit.test.ts` (limits, key independence, window reset). 102 unit tests green.
+
+---
+
 ## Batch 3 — Tenant isolation and database integrity (P0)
 
 ### Service/API layer

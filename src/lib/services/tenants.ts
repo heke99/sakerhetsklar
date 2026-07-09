@@ -1,7 +1,5 @@
 import "server-only";
 
-import { randomBytes, createHash } from "node:crypto";
-
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
@@ -54,48 +52,8 @@ export async function createTenant(actor: ActorContext, input: CreateTenantInput
   return tenant;
 }
 
-export interface InviteUserInput {
-  tenantId: string;
-  email: string;
-  roleCode: TenantRole;
-  invitedBy: string;
-}
-
-export async function inviteUser(actor: ActorContext, input: InviteUserInput) {
-  const admin = getAdminClient();
-
-  const token = randomBytes(32).toString("hex");
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
-
-  const { data: invitation, error } = await admin
-    .from("tenant_invitations")
-    .insert({
-      tenant_id: input.tenantId,
-      email: input.email,
-      role_code: input.roleCode,
-      token_hash: tokenHash,
-      expires_at: expiresAt,
-      invited_by: input.invitedBy,
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(`Failed to create invitation: ${error.message}`);
-
-  await writeAuditLog({
-    tenantId: input.tenantId,
-    actorUserId: actor.userId,
-    action: "tenant.user_invited",
-    entityType: "tenant_invitation",
-    entityId: invitation.id,
-    newValue: { email: input.email, role: input.roleCode },
-  });
-
-  // The raw token is returned once for delivery (email integration); only the
-  // hash is stored.
-  return { invitation, token };
-}
+// Invitations live in src/lib/services/invitations.ts (hashed tokens, email
+// delivery, accept/revoke/resend lifecycle).
 
 export async function assignRole(
   actor: ActorContext,
@@ -148,4 +106,83 @@ export async function assignRole(
   });
 
   return assignment;
+}
+
+/** Replaces the member's tenant roles with a single new role (audited). */
+export async function replaceMemberRole(
+  actor: ActorContext,
+  input: { tenantId: string; userId: string; roleCode: TenantRole },
+) {
+  const admin = getAdminClient();
+
+  const { data: previous } = await admin
+    .from("role_assignments")
+    .select("id, roles(code)")
+    .eq("tenant_id", input.tenantId)
+    .eq("user_id", input.userId)
+    .eq("status", "active");
+
+  await admin
+    .from("role_assignments")
+    .update({ status: "revoked", valid_to: new Date().toISOString() })
+    .eq("tenant_id", input.tenantId)
+    .eq("user_id", input.userId)
+    .eq("status", "active");
+
+  const assignment = await assignRole(actor, input);
+
+  type PrevRow = { roles: { code: string } | null };
+  await writeAuditLog({
+    tenantId: input.tenantId,
+    actorUserId: actor.userId,
+    action: "user.role_changed",
+    entityType: "tenant_membership",
+    entityId: input.userId,
+    previousValue: {
+      roles: ((previous ?? []) as unknown as PrevRow[])
+        .map((p) => p.roles?.code)
+        .filter(Boolean),
+    },
+    newValue: { role: input.roleCode },
+  });
+
+  return assignment;
+}
+
+/** Deactivates a member: membership + all active role assignments (audited). */
+export async function deactivateMember(
+  actor: ActorContext,
+  input: { tenantId: string; userId: string; reason?: string },
+) {
+  const admin = getAdminClient();
+
+  const { data: membership, error } = await admin
+    .from("tenant_memberships")
+    .update({ status: "removed" })
+    .eq("tenant_id", input.tenantId)
+    .eq("user_id", input.userId)
+    .eq("status", "active")
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!membership) throw new Error("Membership not found");
+
+  await admin
+    .from("role_assignments")
+    .update({ status: "revoked", valid_to: new Date().toISOString() })
+    .eq("tenant_id", input.tenantId)
+    .eq("user_id", input.userId)
+    .eq("status", "active");
+
+  await writeAuditLog({
+    tenantId: input.tenantId,
+    actorUserId: actor.userId,
+    action: "user.deactivated",
+    entityType: "tenant_membership",
+    entityId: membership.id,
+    newValue: { userId: input.userId },
+    reason: input.reason ?? null,
+  });
+
+  return membership;
 }

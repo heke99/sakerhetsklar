@@ -11,6 +11,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { safeNextPath } from "@/lib/auth/safe-next";
 
 const schema = z.object({
   email: z.string().email("Ange en giltig e-postadress"),
@@ -51,7 +52,7 @@ export function LoginForm() {
       return;
     }
 
-    router.push(searchParams.get("next") ?? "/app/overview");
+    router.push(safeNextPath(searchParams.get("next")));
     router.refresh();
   }
 
@@ -83,7 +84,10 @@ export function LoginForm() {
             <Label htmlFor="password" className="text-slate-800">
               Lösenord
             </Label>
-            <Link href="#" className="text-sm font-medium text-blue-700 hover:text-blue-900">
+            <Link
+              href="/reset-password"
+              className="text-sm font-medium text-blue-700 hover:text-blue-900"
+            >
               Glömt lösenord?
             </Link>
           </div>
@@ -113,25 +117,6 @@ export function LoginForm() {
           {isSubmitting ? "Loggar in…" : "Logga in"}
         </Button>
       </form>
-
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-          <div className="w-full border-t border-slate-200" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase tracking-[0.18em]">
-          <span className="bg-white px-3 text-slate-500">Enterprise</span>
-        </div>
-      </div>
-
-      <Button
-        type="button"
-        variant="outline"
-        disabled
-        className="h-11 w-full border-slate-300 bg-slate-50 text-slate-500"
-        aria-disabled="true"
-      >
-        Fortsätt med Entra ID — kommer snart
-      </Button>
 
       <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
         Åtkomst loggas. Använd inte delade konton. Kontakta administratör om du saknar behörighet eller rätt tenant.

@@ -1,18 +1,11 @@
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
-import { StatusBadge } from "@/components/app/status-badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TENANT_ROLE_LABELS_SV, type TenantRole } from "@/lib/authz/roles";
+import { hasPlatformRole, hasTenantRole } from "@/lib/authz/context";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
 import { getAdminClient } from "@/lib/server/supabase-admin";
+
+import { UserManagement, type InvitationItem, type MemberItem } from "./user-management";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inställningar" };
@@ -23,10 +16,20 @@ const deploymentModelLabels: Record<string, string> = {
   customer_owned: "Kundägd datamiljö (Model C)",
 };
 
+const planLabels: Record<string, string> = {
+  starter: "Bas",
+  business: "Verksamhet",
+  enterprise: "Enterprise",
+};
+
 export default async function SettingsPage() {
   const current = await getCurrentTenant();
   if (!current) redirect("/login");
-  const { tenant } = current;
+  const { actor, tenant } = current;
+
+  const canManage =
+    hasTenantRole(actor, tenant.id, ["tenant_admin"]) ||
+    hasPlatformRole(actor, ["platform_owner", "platform_admin"]);
 
   const admin = getAdminClient();
   const [membersRes, assignmentsRes, invitationsRes] = await Promise.all([
@@ -44,7 +47,8 @@ export default async function SettingsPage() {
       .from("tenant_invitations")
       .select("id, email, role_code, status, expires_at")
       .eq("tenant_id", tenant.id)
-      .eq("status", "pending"),
+      .eq("status", "pending")
+      .order("created_at", { ascending: false }),
   ]);
 
   type AssignmentRow = { user_id: string; roles: { code: string } | null };
@@ -61,7 +65,23 @@ export default async function SettingsPage() {
     status: string;
     profiles: { full_name: string | null; email: string | null } | null;
   };
-  const members = (membersRes.data ?? []) as unknown as MemberRow[];
+  const members: MemberItem[] = (
+    (membersRes.data ?? []) as unknown as MemberRow[]
+  ).map((m) => ({
+    userId: m.user_id,
+    fullName: m.profiles?.full_name ?? null,
+    email: m.profiles?.email ?? null,
+    roles: rolesByUser.get(m.user_id) ?? [],
+  }));
+
+  const invitations: InvitationItem[] = (invitationsRes.data ?? []).map(
+    (inv) => ({
+      id: inv.id as string,
+      email: inv.email as string,
+      roleCode: inv.role_code as string,
+      expiresAt: inv.expires_at as string,
+    }),
+  );
 
   return (
     <main className="p-8">
@@ -83,7 +103,7 @@ export default async function SettingsPage() {
           </div>
           <div>
             <dt className="text-muted-foreground">Plan</dt>
-            <dd className="font-medium capitalize">{tenant.plan}</dd>
+            <dd className="font-medium">{planLabels[tenant.plan] ?? tenant.plan}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Driftmodell</dt>
@@ -94,79 +114,13 @@ export default async function SettingsPage() {
         </dl>
       </section>
 
-      <section className="mb-8">
-        <h2 className="mb-3 text-lg font-semibold">Användare</h2>
-        <div className="rounded-xl border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Namn</TableHead>
-                <TableHead>E-post</TableHead>
-                <TableHead>Roller</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {members.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-muted-foreground">
-                    Inga användare ännu.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                members.map((m) => (
-                  <TableRow key={m.user_id}>
-                    <TableCell>{m.profiles?.full_name ?? "–"}</TableCell>
-                    <TableCell>{m.profiles?.email ?? "–"}</TableCell>
-                    <TableCell className="space-x-1">
-                      {(rolesByUser.get(m.user_id) ?? []).map((code) => (
-                        <StatusBadge key={code} color="blue">
-                          {TENANT_ROLE_LABELS_SV[code as TenantRole] ?? code}
-                        </StatusBadge>
-                      ))}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Väntande inbjudningar</h2>
-        <div className="rounded-xl border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>E-post</TableHead>
-                <TableHead>Roll</TableHead>
-                <TableHead>Giltig till</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(invitationsRes.data ?? []).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-muted-foreground">
-                    Inga väntande inbjudningar.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                (invitationsRes.data ?? []).map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell>{inv.email}</TableCell>
-                    <TableCell>
-                      {TENANT_ROLE_LABELS_SV[inv.role_code as TenantRole] ?? inv.role_code}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(inv.expires_at).toLocaleDateString("sv-SE")}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
+      <UserManagement
+        tenantId={tenant.id}
+        currentUserId={actor.userId}
+        members={members}
+        invitations={invitations}
+        canManage={canManage}
+      />
     </main>
   );
 }

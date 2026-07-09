@@ -13,6 +13,8 @@ import {
 import { requirePlatformRole } from "@/lib/services/require-platform";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
+import { CreateTenantForm } from "./create-tenant-form";
+
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tenants" };
 
@@ -56,6 +58,10 @@ export default async function TenantListPage() {
         description="All tenants with classification, deployment model, onboarding, incidents and readiness."
       />
 
+      <div className="mb-4">
+        <CreateTenantForm />
+      </div>
+
       <div className="rounded-xl border bg-card">
         <Table>
           <TableHeader>
@@ -76,7 +82,7 @@ export default async function TenantListPage() {
             {(tenantsRes.data ?? []).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={10} className="text-muted-foreground">
-                  No tenants yet. Create one via the API or seed data.
+                  No tenants yet. Use &quot;Create tenant&quot; above to onboard the first customer.
                 </TableCell>
               </TableRow>
             ) : (
