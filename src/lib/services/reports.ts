@@ -1,6 +1,9 @@
 import "server-only";
 
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { assertTenantEntity } from "@/lib/authz/tenant-guards";
@@ -33,7 +36,11 @@ export async function createReportDraft(
   actor: ActorContext,
   input: { tenantId: string; incidentId: string; stage: ReportStage; trackCode?: string },
 ) {
-  const admin = getAdminClient();
+  // Tenant business data lives in the tenant's data plane (A: central,
+  // B/C: isolated); tenant registry + report field definitions are
+  // control-plane reference data.
+  const admin = await getTenantDataPlaneClient(input.tenantId);
+  const control = getTenantControlPlaneClient();
 
   const [incidentRes, tenantRes, fieldDefsRes, deadlineRes] = await Promise.all([
     admin
@@ -42,12 +49,12 @@ export async function createReportDraft(
       .eq("id", input.incidentId)
       .eq("tenant_id", input.tenantId)
       .maybeSingle(),
-    admin
+    control
       .from("tenants")
       .select("name, organization_number, primary_contact_name, primary_contact_email, primary_contact_phone")
       .eq("id", input.tenantId)
       .maybeSingle(),
-    admin
+    control
       .from("report_field_definitions")
       .select("*")
       .eq("report_stage", input.stage)
@@ -183,7 +190,7 @@ export async function updateReportFields(
   actor: ActorContext,
   input: { tenantId: string; reportId: string; fields: Record<string, string> },
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
 
   // The report must belong to the tenant before any field rows are written.
   await assertTenantEntity("incident_reports", input.reportId, input.tenantId);
@@ -229,7 +236,7 @@ export async function setReportStatus(
     submissionMethod?: "cyberportalen" | "reserve_procedure" | "other";
   },
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data: report } = await admin
     .from("incident_reports")
     .select("*")

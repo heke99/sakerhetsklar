@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import {
   computeReadiness,
@@ -16,7 +16,7 @@ export const GET = withApi(async (req, { actor }) => {
 
   await ensureControlsInstantiated(tenantId);
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
   const [controlsRes, readiness] = await Promise.all([
     admin
       .from("controls")
@@ -54,7 +54,7 @@ export const PATCH = withApi(async (req, { actor }) => {
     throw forbidden("controls.approve permission required to approve");
   }
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data: previous } = await admin
     .from("controls")
     .select("status, assigned_user_name")

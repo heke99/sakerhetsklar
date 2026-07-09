@@ -4,6 +4,7 @@ import { getAdminClient } from "@/lib/server/supabase-admin";
 
 export const GET = withApi(async (req, { actor }) => {
   const tenantId = req.nextUrl.searchParams.get("tenantId");
+  // Anomaly telemetry is control-plane security monitoring data.
   const admin = getAdminClient();
 
   if (tenantId) {

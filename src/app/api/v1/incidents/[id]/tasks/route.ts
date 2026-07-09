@@ -3,7 +3,7 @@ import { z } from "zod";
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
 import { assertIncidentTenant } from "@/lib/authz/tenant-guards";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 
 const taskSchema = z.object({
@@ -22,7 +22,7 @@ export const POST = withApi<{ id: string }>(async (req, { actor, params }) => {
   }
   await assertIncidentTenant(actor, params.id, input.tenantId);
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data, error } = await admin
     .from("incident_tasks")
     .insert({
@@ -64,7 +64,7 @@ export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
   }
   await assertIncidentTenant(actor, params.id, input.tenantId);
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   // Scope the update to the incident in the URL as well as the tenant so a
   // task id from another incident cannot be manipulated through this route.
   const { data, error } = await admin

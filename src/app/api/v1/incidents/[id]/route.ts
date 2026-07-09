@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { changeIncidentStatus } from "@/lib/services/incidents";
 
@@ -43,7 +44,7 @@ export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
     throw forbidden("incidents.write permission required");
   }
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
 
   if (input.status) {
     const updated = await changeIncidentStatus(actor, {

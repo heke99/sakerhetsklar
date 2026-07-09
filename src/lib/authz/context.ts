@@ -1,5 +1,6 @@
 import "server-only";
 
+import { filterTenantsWithUnreadyDataPlane } from "@/lib/server/data-plane";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { getCurrentUser } from "@/lib/server/supabase-server";
 
@@ -82,6 +83,21 @@ export async function getActorContext(): Promise<ActorContext | null> {
   const supportAccessTenantIds = new Set<string>(
     (supportRes.data ?? []).map((r) => r.tenant_id as string),
   );
+
+  // FAIL CLOSED for Model B/C tenants whose data plane is not provisioned:
+  // drop those memberships entirely so every authorization check
+  // (isTenantMember/hasPermission) denies access until provisioning is done.
+  const candidateTenantIds = [
+    ...new Set([...tenantRoles.keys(), ...supportAccessTenantIds]),
+  ];
+  if (candidateTenantIds.length > 0) {
+    const unready = await filterTenantsWithUnreadyDataPlane(candidateTenantIds);
+    for (const tenantId of unready) {
+      tenantRoles.delete(tenantId);
+      tenantPermissions.delete(tenantId);
+      supportAccessTenantIds.delete(tenantId);
+    }
+  }
 
   return {
     userId: user.id,

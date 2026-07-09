@@ -133,22 +133,6 @@ Applied to every route the audit flagged:
 
 ---
 
-## Batch 5 — Enterprise SSO, MFA and auth provider fail-closed behavior
-
-### Changes
-
-- **New `src/lib/services/auth-policy.ts`**: `getTenantAuthPolicy(tenantId)` reads `tenant_auth_providers` (active rows only); `checkAuthGate(tenantId)` enforces fail-closed:
-  - Tenant requires SSO (active `entra_id_oidc`/`saml`/`oidc_generic` provider) → password sessions are **blocked for all users except tenant admins** (who must be able to finish configuration). SSO login is not offered by the product yet, so a required-SSO tenant locks rather than silently bypassing its own policy.
-  - Tenant requires MFA → sessions below AAL2 (checked via Supabase `getAuthenticatorAssuranceLevel`) are blocked.
-- Gate enforced in the tenant app layout on every page load; blocked users land on the new `/auth-blocked` page with Swedish explanations per reason.
-- Login page no longer advertises SSO ("kommer snart" removed in Batch 4); the platform integrations page copy now states that Entra ID/OIDC/SAML requires per-tenant provisioning and fails closed — no "coming soon" presented as ready.
-
-### Tests
-
-`auth-policy.test.ts` — 8 tests: default policy, SSO detection, normal user blocked under SSO requirement, tenant admin exempted, MFA AAL1 blocked / AAL2 allowed, inactive providers cause no accidental lockout. 110 unit tests green.
-
----
-
 ## Batch 4 — Authentication, login, password reset and invite flow (P0)
 
 ### Login
@@ -176,6 +160,49 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 ### Tests
 
 `safe-next.test.ts` (open-redirect matrix), `rate-limit.test.ts` (limits, key independence, window reset). 102 unit tests green.
+
+---
+
+## Batch 5 — Enterprise SSO, MFA and auth provider fail-closed behavior
+
+### Changes
+
+- **New `src/lib/services/auth-policy.ts`**: `getTenantAuthPolicy(tenantId)` reads `tenant_auth_providers` (active rows only); `checkAuthGate(tenantId)` enforces fail-closed:
+  - Tenant requires SSO (active `entra_id_oidc`/`saml`/`oidc_generic` provider) → password sessions are **blocked for all users except tenant admins** (who must be able to finish configuration). SSO login is not offered by the product yet, so a required-SSO tenant locks rather than silently bypassing its own policy.
+  - Tenant requires MFA → sessions below AAL2 (checked via Supabase `getAuthenticatorAssuranceLevel`) are blocked.
+- Gate enforced in the tenant app layout on every page load; blocked users land on the new `/auth-blocked` page with Swedish explanations per reason.
+- Login page no longer advertises SSO ("kommer snart" removed in Batch 4); the platform integrations page copy now states that Entra ID/OIDC/SAML requires per-tenant provisioning and fails closed — no "coming soon" presented as ready.
+
+### Tests
+
+`auth-policy.test.ts` — 8 tests: default policy, SSO detection, normal user blocked under SSO requirement, tenant admin exempted, MFA AAL1 blocked / AAL2 allowed, inactive providers cause no accidental lockout. 110 unit tests green.
+
+---
+
+## Batch 6 — Model A/B/C data-plane architecture (P0)
+
+### Abstraction
+
+New `src/lib/server/data-plane.ts`:
+
+- `resolveTenantDeploymentModel(tenantId)`, `getTenantControlPlaneClient()`, `getTenantDataPlaneClient(tenantId)`, `assertDataPlaneReady(tenantId)`, `filterTenantsWithUnreadyDataPlane(ids)`, `invalidateDataPlaneCache()`.
+- Model A → central tenant-aware admin client. Model B/C → isolated Supabase client from `tenant_data_plane_connections` (active + `supabase_url` + secret resolvable from env ref). Anything less throws `DataPlaneNotReadyError` — **there is no fallback to the central database**.
+- 30s TTL cache with explicit invalidation on deployment-model change.
+
+### Fail-closed enforcement at the identity layer
+
+`getActorContext` now **drops memberships and support access for any Model B/C tenant whose data plane is not ready** — every `isTenantMember`/`hasPermission` check across all routes and pages denies access until provisioning completes. This makes fail-closed behavior global rather than per-refactored-callsite.
+
+### Service and route refactor
+
+- Services now split control-plane (tenants registry, tenant_settings, rule packages, role assignments, notifications, reference data) from tenant-plane (incidents, reports, evidence incl. storage, scope/size assessments, deadlines, controls, readiness inputs) access: `incidents`, `reports`, `evidence`, `significance`, `deadlines`, `scope`, `readiness` all obtain the tenant client via `getTenantDataPlaneClient`.
+- Tenant-guard entity checks (`assertTenantEntity` etc.) run against the claimed tenant's data plane.
+- 20 tenant-data API route files refactored from `getAdminClient()` to the data-plane client. Anomaly telemetry, audit logs, support access, tenant registry and jobs intentionally stay control-plane (documented in module docstring). Escalation/anomaly jobs process the central (Model A) plane; B/C planes run their own scheduler per the deployment docs.
+- `PATCH /tenants/[id]`: switching a tenant to Model B/C now returns **409 `data_plane_not_ready`** unless a fully provisioned active connection with resolvable secret exists — the platform cannot silently lock out a tenant or leave B/C "selected" while data flows centrally.
+
+### Tests
+
+`data-plane.test.ts` — 8 tests: Model A passthrough; B/C with no connection / inactive connection / missing secret all throw `DataPlaneNotReadyError`; **no central fallback ever occurs for B/C**; fully provisioned B returns the isolated client; unknown tenants are treated as unready (fail closed). 118 unit tests green.
 
 ---
 

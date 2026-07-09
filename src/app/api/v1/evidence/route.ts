@@ -1,6 +1,6 @@
 import { withApi, ok, badRequest, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { uploadEvidence } from "@/lib/services/evidence";
 
 export const GET = withApi(async (req, { actor }) => {
@@ -8,7 +8,7 @@ export const GET = withApi(async (req, { actor }) => {
   if (!tenantId) throw notFound("tenantId is required");
   if (!isTenantMember(actor, tenantId)) throw forbidden();
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
   let query = admin
     .from("evidence")
     .select("id, file_name, file_type, evidence_type, classification, hash_sha256, incident_id, control_id, legal_hold, uploaded_at, uploaded_by")

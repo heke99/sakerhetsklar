@@ -1,6 +1,9 @@
 import "server-only";
 
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { loadRules } from "@/lib/rule-engine/service";
@@ -25,7 +28,8 @@ export async function assessIncidentSignificance(
   actor: ActorContext,
   input: { tenantId: string; incidentId: string; facts: Facts },
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
+  const control = getTenantControlPlaneClient();
 
   const [incidentRes, scopeRes, packagesRes] = await Promise.all([
     admin
@@ -41,7 +45,7 @@ export async function assessIncidentSignificance(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    admin
+    control
       .from("tenant_rule_package_versions")
       .select("rule_set_code, version")
       .eq("tenant_id", input.tenantId)
@@ -58,7 +62,7 @@ export async function assessIncidentSignificance(
       ? assignedPackages
       : ["MCFFS_2026_8", "GDPR_PERSONAL_DATA_BREACH", "CONTRACTUAL_REPORTING", "CYBER_INSURANCE"];
 
-  const { data: tenantRow } = await admin
+  const { data: tenantRow } = await control
     .from("tenants")
     .select("organization_type")
     .eq("id", input.tenantId)
@@ -205,7 +209,7 @@ export async function approveSignificanceAssessment(
   actor: ActorContext,
   input: { tenantId: string; assessmentId: string; decision: "approved" | "rejected"; reason?: string },
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data: assessment } = await admin
     .from("incident_significance_assessments")
     .select("id, incident_id, recommendation")

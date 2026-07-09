@@ -1,6 +1,9 @@
 import "server-only";
 
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 
 export interface ReadinessScores {
   nis2Readiness: number;
@@ -30,14 +33,15 @@ function pct(numerator: number, denominator: number): number {
 
 /** Instantiates tenant controls from the requirement library if none exist. */
 export async function ensureControlsInstantiated(tenantId: string): Promise<void> {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
+  const control = getTenantControlPlaneClient();
   const { count } = await admin
     .from("controls")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId);
   if ((count ?? 0) > 0) return;
 
-  const { data: requirements } = await admin
+  const { data: requirements } = await control
     .from("control_requirements")
     .select("*")
     .in("status", ["active", "pending_guidance"])
@@ -62,7 +66,8 @@ export async function ensureControlsInstantiated(tenantId: string): Promise<void
 }
 
 export async function computeReadiness(tenantId: string): Promise<ReadinessScores> {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
+  const control = getTenantControlPlaneClient();
 
   const [controlsRes, rolesRes, vendorsRes, trainingRes, membersRes, fieldsRes] =
     await Promise.all([
@@ -71,7 +76,7 @@ export async function computeReadiness(tenantId: string): Promise<ReadinessScore
         .select("status, evidence_required, evidence_uploaded, area, deadline")
         .eq("tenant_id", tenantId)
         .is("deleted_at", null),
-      admin
+      control
         .from("role_assignments")
         .select("roles(code)")
         .eq("tenant_id", tenantId)
@@ -83,7 +88,7 @@ export async function computeReadiness(tenantId: string): Promise<ReadinessScore
         .is("deleted_at", null),
       admin.from("management_training_records").select("id").eq("tenant_id", tenantId),
       admin.from("management_members").select("id").eq("tenant_id", tenantId),
-      admin
+      control
         .from("report_field_definitions")
         .select("id", { count: "exact", head: true })
         .eq("status", "active"),
@@ -187,11 +192,12 @@ export async function computeReadiness(tenantId: string): Promise<ReadinessScore
 export async function computeDataQualityWarnings(
   tenantId: string,
 ): Promise<DataQualityWarning[]> {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
+  const control = getTenantControlPlaneClient();
 
   const [rulesRes, servicesRes, systemsRes, vendorsRes, rolesRes, controlsRes] =
     await Promise.all([
-      admin.from("data_quality_rules").select("*"),
+      control.from("data_quality_rules").select("*"),
       admin
         .from("critical_services")
         .select("id, service_owner_name, service_owner_user_id")
@@ -207,7 +213,7 @@ export async function computeDataQualityWarnings(
         .select("id, incident_contact_name, incident_contact_email")
         .eq("tenant_id", tenantId)
         .is("deleted_at", null),
-      admin
+      control
         .from("role_assignments")
         .select("roles(code)")
         .eq("tenant_id", tenantId)

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
 import { assertTenantEntity } from "@/lib/authz/tenant-guards";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 
 export const GET = withApi(async (req, { actor }) => {
@@ -11,7 +11,7 @@ export const GET = withApi(async (req, { actor }) => {
   if (!tenantId) throw notFound("tenantId is required");
   if (!isTenantMember(actor, tenantId)) throw forbidden();
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
   const { data, error } = await admin
     .from("risks")
     .select("*, risk_treatments(*)")
@@ -55,7 +55,7 @@ export const POST = withApi(async (req, { actor }) => {
     await assertTenantEntity("vendors", input.linkedVendorId, input.tenantId);
   }
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data, error } = await admin
     .from("risks")
     .insert({

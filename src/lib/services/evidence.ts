@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { hasPermission } from "@/lib/authz/context";
@@ -28,7 +28,7 @@ export async function uploadEvidence(
     ipAddress?: string | null;
   },
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
 
   // Linked entities must belong to the same tenant as the evidence.
   if (input.incidentId) {
@@ -145,7 +145,7 @@ export async function getEvidenceDownloadUrl(
   actor: ActorContext,
   input: { tenantId: string; evidenceId: string; reason?: string; ipAddress?: string | null },
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data: evidence } = await admin
     .from("evidence")
     .select("*")

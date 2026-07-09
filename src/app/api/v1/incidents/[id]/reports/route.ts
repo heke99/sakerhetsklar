@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { createReportDraft } from "@/lib/services/reports";
 
 export const GET = withApi<{ id: string }>(async (req, { actor, params }) => {
@@ -10,7 +10,7 @@ export const GET = withApi<{ id: string }>(async (req, { actor, params }) => {
   if (!tenantId) throw notFound("tenantId is required");
   if (!isTenantMember(actor, tenantId)) throw forbidden();
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
   const { data, error } = await admin
     .from("incident_reports")
     .select("*, incident_report_fields(*), cyberportal_incident_ids(cyberportal_id, report_stage), report_receipts(*)")

@@ -1,12 +1,13 @@
 import { z } from "zod";
 
-import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
+import { ApiError, withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import {
   hasPlatformRole,
   hasTenantRole,
   isPlatformAdmin,
   isTenantMember,
 } from "@/lib/authz/context";
+import { invalidateDataPlaneCache } from "@/lib/server/data-plane";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -57,6 +58,39 @@ export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
     .maybeSingle();
   if (!previous) throw notFound("Tenant not found");
 
+  // Switching to Model B/C requires a fully provisioned data-plane
+  // connection (active + resolvable secret). Without one the tenant would be
+  // locked out by the fail-closed data-plane gate, so refuse the switch with
+  // a clear reason instead of silently breaking the tenant.
+  if (
+    input.deploymentModel &&
+    input.deploymentModel !== "multi_tenant" &&
+    input.deploymentModel !== previous.deployment_model
+  ) {
+    const { data: connection } = await admin
+      .from("tenant_data_plane_connections")
+      .select("status, supabase_url, service_role_key_ref")
+      .eq("tenant_id", params.id)
+      .eq("environment", "prod")
+      .maybeSingle();
+    const secretConfigured = Boolean(
+      connection?.service_role_key_ref &&
+        process.env[connection.service_role_key_ref],
+    );
+    if (
+      !connection ||
+      connection.status !== "active" ||
+      !connection.supabase_url ||
+      !secretConfigured
+    ) {
+      throw new ApiError(
+        409,
+        "Deployment model B/C requires a provisioned, active data-plane connection with a configured server-side secret. Provision the data plane first.",
+        "data_plane_not_ready",
+      );
+    }
+  }
+
   const update: Record<string, unknown> = { updated_by: actor.userId };
   if (input.name !== undefined) update.name = input.name;
   if (input.status !== undefined) update.status = input.status;
@@ -72,6 +106,8 @@ export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
     .select()
     .single();
   if (error) throw new Error(error.message);
+
+  if (input.deploymentModel) invalidateDataPlaneCache(params.id);
 
   await writeAuditLog({
     tenantId: params.id,

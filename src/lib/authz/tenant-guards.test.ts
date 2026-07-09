@@ -28,6 +28,11 @@ vi.mock("@/lib/server/supabase-admin", () => ({
   getAdminClient: () => ({ from: vi.fn(() => makeBuilder()) }),
 }));
 
+// Model A passthrough: the data-plane client is the same mocked client.
+vi.mock("@/lib/server/data-plane", () => ({
+  getTenantDataPlaneClient: async () => ({ from: vi.fn(() => makeBuilder()) }),
+}));
+
 const {
   assertTenantAccess,
   assertTenantEntity,

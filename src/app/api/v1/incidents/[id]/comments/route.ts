@@ -3,7 +3,7 @@ import { z } from "zod";
 import { withApi, ok, parseBody, forbidden } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
 import { assertIncidentTenant } from "@/lib/authz/tenant-guards";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 
 const commentSchema = z.object({
   tenantId: z.string().uuid(),
@@ -17,7 +17,7 @@ export const POST = withApi<{ id: string }>(async (req, { actor, params }) => {
   }
   await assertIncidentTenant(actor, params.id, input.tenantId);
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data, error } = await admin
     .from("incident_comments")
     .insert({

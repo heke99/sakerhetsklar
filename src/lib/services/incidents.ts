@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { assertAllTenantEntities } from "@/lib/authz/tenant-guards";
@@ -25,7 +25,7 @@ export interface CreateIncidentInput {
 }
 
 export async function createIncident(actor: ActorContext, input: CreateIncidentInput) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
 
   // Linked resources must belong to the same tenant — never trust raw IDs.
   await Promise.all([
@@ -125,7 +125,7 @@ export async function changeIncidentStatus(
   actor: ActorContext,
   input: { tenantId: string; incidentId: string; toStatus: string; reason?: string },
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data: incident } = await admin
     .from("incidents")
     .select("id, status, is_ongoing")

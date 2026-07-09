@@ -1,6 +1,10 @@
 import "server-only";
 
 import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import {
   computeDeadlines,
@@ -18,7 +22,8 @@ export async function createDeadlinesForIncident(input: {
   incidentId: string;
   actorUserId?: string;
 }): Promise<void> {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
+  const control = getTenantControlPlaneClient();
 
   const [incidentRes, assessmentRes, settingsRes, notificationRes] = await Promise.all([
     admin
@@ -34,7 +39,7 @@ export async function createDeadlinesForIncident(input: {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    admin.from("tenant_settings").select("*").eq("tenant_id", input.tenantId).maybeSingle(),
+    control.from("tenant_settings").select("*").eq("tenant_id", input.tenantId).maybeSingle(),
     admin
       .from("incident_reports")
       .select("submitted_marked_at")
@@ -96,6 +101,8 @@ export async function processDeadlineEscalations(now = new Date()): Promise<{
   deadlinesMissed: number;
   lateRecordsCreated: number;
 }> {
+  // Scheduler job for the CENTRAL (Model A) data plane. Model B/C planes run
+  // their own scheduler against their own plane (see docs/deployment-models).
   const admin = getAdminClient();
 
   const { data: deadlines } = await admin

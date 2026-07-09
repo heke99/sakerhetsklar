@@ -1,6 +1,9 @@
 import "server-only";
 
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { loadRules } from "@/lib/rule-engine/service";
@@ -32,7 +35,7 @@ export async function saveSizeAssessment(
   input: SizeInput & { financialYear?: number; legalEntityId?: string },
 ) {
   const result = assessSize(input);
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
 
   const { data, error } = await admin
     .from("entity_size_assessments")
@@ -77,7 +80,8 @@ export async function runScopeAssessment(
   tenantId: string,
   answers: ScopeAnswers,
 ) {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
+  const control = getTenantControlPlaneClient();
 
   // Latest size assessment provides size_class facts.
   const { data: sizeRow } = await admin
@@ -89,7 +93,7 @@ export async function runScopeAssessment(
     .maybeSingle();
 
   // Sector reference: which of the selected sectors are annex 1/2.
-  const { data: sectorRows } = await admin
+  const { data: sectorRows } = await control
     .from("sectors")
     .select("code, annex")
     .in("code", answers.sectors.length > 0 ? answers.sectors : ["__none__"]);
@@ -132,7 +136,7 @@ export async function runScopeAssessment(
   });
 
   // Supervisory authorities from mapping table.
-  const { data: authorityRows } = await admin
+  const { data: authorityRows } = await control
     .from("sector_supervisory_authorities")
     .select("authority_code, sector_code")
     .in("sector_code", answers.sectors.length > 0 ? answers.sectors : ["__none__"]);
@@ -205,7 +209,7 @@ export async function runScopeAssessment(
 
   // Assign supervisory authorities.
   for (const code of authorities) {
-    await admin.from("tenant_supervisory_authorities").upsert(
+    await control.from("tenant_supervisory_authorities").upsert(
       {
         tenant_id: tenantId,
         authority_code: code,
@@ -219,12 +223,12 @@ export async function runScopeAssessment(
   // Assign rule packages (versioned).
   const allPackages = [...packages.active, ...packages.pending];
   if (allPackages.length > 0) {
-    const { data: ruleSets } = await admin
+    const { data: ruleSets } = await control
       .from("regulatory_rule_sets")
       .select("code, version")
       .in("code", allPackages);
     for (const rs of ruleSets ?? []) {
-      await admin.from("tenant_rule_package_versions").upsert(
+      await control.from("tenant_rule_package_versions").upsert(
         {
           tenant_id: tenantId,
           rule_set_code: rs.code,
@@ -238,7 +242,7 @@ export async function runScopeAssessment(
   }
 
   // Onboarding progress.
-  await admin.from("onboarding_progress").upsert(
+  await control.from("onboarding_progress").upsert(
     {
       tenant_id: tenantId,
       step_key: "sector_assessment",
@@ -248,7 +252,7 @@ export async function runScopeAssessment(
     },
     { onConflict: "tenant_id,step_key" },
   );
-  await admin.from("onboarding_progress").upsert(
+  await control.from("onboarding_progress").upsert(
     {
       tenant_id: tenantId,
       step_key: "rule_profile",
@@ -258,7 +262,7 @@ export async function runScopeAssessment(
     },
     { onConflict: "tenant_id,step_key" },
   );
-  await admin
+  await control
     .from("tenants")
     .update({ onboarding_status: "in_progress" })
     .eq("id", tenantId)

@@ -6,7 +6,7 @@ import {
   assertIncidentTenant,
   assertTenantEntity,
 } from "@/lib/authz/tenant-guards";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 
 export const GET = withApi(async (req, { actor }) => {
@@ -14,7 +14,7 @@ export const GET = withApi(async (req, { actor }) => {
   if (!tenantId) throw notFound("tenantId is required");
   if (!isTenantMember(actor, tenantId)) throw forbidden();
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
   const { data, error } = await admin
     .from("insurance_policies")
     .select("*")
@@ -39,7 +39,7 @@ export const POST = withApi(async (req, { actor }) => {
   if (!hasTenantRole(actor, input.tenantId, ["tenant_admin", "ciso"])) {
     throw forbidden();
   }
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data, error } = await admin
     .from("insurance_policies")
     .insert({
@@ -84,7 +84,7 @@ export const PATCH = withApi(async (req, { actor }) => {
   if (input.policyId) {
     await assertTenantEntity("insurance_policies", input.policyId, input.tenantId);
   }
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data, error } = await admin
     .from("insurance_notification_requirements")
     .insert({

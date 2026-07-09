@@ -1,6 +1,7 @@
 import "server-only";
 
 import { forbidden, notFound } from "@/lib/api/handler";
+import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { hasPermission, isTenantMember, type ActorContext } from "./context";
@@ -46,7 +47,7 @@ export async function assertTenantEntity(
   tenantId: string,
   { idColumn = "id" }: { idColumn?: string } = {},
 ): Promise<void> {
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
   const { data, error } = await admin
     .from(table)
     .select(idColumn)
@@ -69,7 +70,7 @@ export async function assertAllTenantEntities(
   const unique = [...new Set(ids)];
   if (unique.length === 0) return;
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenantId);
   const { data, error } = await admin
     .from(table)
     .select("id")
@@ -105,6 +106,11 @@ export async function resolveTenantFromEntity(
  * Resolves an entity's tenant, verifies it matches the optional expected
  * tenant, and asserts the actor may access it. Returns the resolved tenant id
  * (the authoritative one — never the client-supplied value).
+ *
+ * When `expectedTenantId` is supplied, the lookup runs against that tenant's
+ * data plane (Model A central or Model B/C isolated). Without it, the lookup
+ * runs against the central plane (Model A) — B/C flows always carry an
+ * expected tenant.
  */
 async function assertEntityTenantForActor(
   table: string,
@@ -113,15 +119,34 @@ async function assertEntityTenantForActor(
   expectedTenantId?: string,
   permission?: Permission,
 ): Promise<string> {
-  const tenantId = await resolveTenantFromEntity(table, id);
-  if (!tenantId) throw notFound("Resource not found");
-  if (expectedTenantId && expectedTenantId !== tenantId) {
-    throw notFound("Resource not found");
+  let tenantId: string;
+
+  if (expectedTenantId) {
+    // Membership first so a non-member can never probe existence.
+    if (!isTenantMember(actor, expectedTenantId)) {
+      throw notFound("Resource not found");
+    }
+    const client = await getTenantDataPlaneClient(expectedTenantId);
+    const { data, error } = await client
+      .from(table)
+      .select("tenant_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data || data.tenant_id !== expectedTenantId) {
+      throw notFound("Resource not found");
+    }
+    tenantId = expectedTenantId;
+  } else {
+    const resolved = await resolveTenantFromEntity(table, id);
+    if (!resolved) throw notFound("Resource not found");
+    if (!isTenantMember(actor, resolved)) {
+      // Same status as non-existence: do not leak that the resource exists.
+      throw notFound("Resource not found");
+    }
+    tenantId = resolved;
   }
-  if (!isTenantMember(actor, tenantId)) {
-    // Same status as non-existence: do not leak that the resource exists.
-    throw notFound("Resource not found");
-  }
+
   if (permission && !hasPermission(actor, tenantId, permission)) {
     throw forbidden(`${permission} permission required`);
   }
