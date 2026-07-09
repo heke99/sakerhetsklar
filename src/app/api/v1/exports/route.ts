@@ -1,5 +1,6 @@
 import { withApi, badRequest, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
+import { assertSupportAccessAllows } from "@/lib/authz/support-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import { buildBoardReport, buildSupervisoryPackage } from "@/lib/exports/packages";
@@ -14,6 +15,7 @@ export const GET = withApi(async (req, { actor, meta }) => {
   const format = (req.nextUrl.searchParams.get("format") ?? "pdf") as "pdf" | "docx";
 
   if (!tenantId) throw notFound("tenantId is required");
+  await assertSupportAccessAllows(actor, tenantId, "export");
   if (!hasPermission(actor, tenantId, "exports.generate")) {
     throw forbidden("exports.generate permission required");
   }

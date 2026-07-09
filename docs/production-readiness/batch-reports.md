@@ -179,6 +179,32 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 10 — Evidence bank, file security and chain of custody
+
+### Support-access scope enforcement (previously dead flags)
+
+New `src/lib/authz/support-guards.ts`: for actors whose only tenant relationship is an approved support grant, `include_evidence` is now required for evidence download/upload, `scope=read_write` for uploads, and `allow_export` for exports (board report, supervisory package, Excel, procurement package, report export). Every allowed **and denied** support action is written to `support_access_logs` — the table that was never populated before.
+
+### File security
+
+- `src/lib/evidence/file-policy.ts` (unit-tested): extension **allowlist** (documents, logs, images, mail, archives, captures) + hard blocklist (executables/scripts), plan-based size limits (25/50/100 MB), enforced in the upload service; the old flat route-level 50 MB check removed.
+- `src/lib/evidence/malware-scan.ts`: scan hook posting bytes to `MALWARE_SCAN_URL`; infected files rejected + audited; **fails closed with 503 when `MALWARE_SCAN_REQUIRED=true` and the scanner is unavailable/unset**; skipped (documented) when not configured.
+- Storage was already private with 300s signed URLs and full access/custody/download logging (verified).
+
+### Legal hold
+
+Migration `0023_legal_hold_guard.sql`: DB triggers block both hard deletes and soft deletes (`deleted_at`) of evidence that is flagged `legal_hold` or part of an active `legal_holds` hold — no service bug, retention job or manual SQL can remove held evidence.
+
+### UI
+
+Evidence page now shows retention status ("Bevarande"/Tillsvidare), uploader (resolved from profiles), alongside existing hash/classification/legal-hold/custody columns, and uses the data-plane client. Improved empty state.
+
+### Tests
+
+`file-policy.test.ts` — allowlist, blocklist, unknown-extension rejection, plan-based limits, unknown-plan fallback. 130 unit tests green; DB suites green.
+
+---
+
 ## Batch 9 — Incident and reporting workflow end-to-end
 
 ### Workflow controls implemented

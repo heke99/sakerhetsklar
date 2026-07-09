@@ -12,7 +12,10 @@ import {
 } from "@/components/ui/table";
 import { hasPermission } from "@/lib/authz/context";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 
 import { EvidenceUploadForm, EvidenceDownloadButton } from "./evidence-forms";
 
@@ -33,7 +36,7 @@ export default async function EvidencePage() {
   if (!current) redirect("/login");
   const { tenant, actor } = current;
 
-  const admin = getAdminClient();
+  const admin = await getTenantDataPlaneClient(tenant.id);
   let query = admin
     .from("evidence")
     .select("*, incidents(reference)")
@@ -44,6 +47,21 @@ export default async function EvidencePage() {
     query = query.in("classification", ["open", "internal", "confidential"]);
   }
   const { data: evidence } = await query;
+
+  // Uploader names come from the identity control plane.
+  const uploaderIds = [
+    ...new Set((evidence ?? []).map((e) => e.uploaded_by).filter(Boolean)),
+  ] as string[];
+  const control = getTenantControlPlaneClient();
+  const { data: profiles } = uploaderIds.length
+    ? await control
+        .from("profiles")
+        .select("user_id, full_name, email")
+        .in("user_id", uploaderIds)
+    : { data: [] as { user_id: string; full_name: string | null; email: string | null }[] };
+  const uploaderById = new Map(
+    (profiles ?? []).map((p) => [p.user_id, p.full_name ?? p.email ?? p.user_id]),
+  );
 
   return (
     <main className="p-8">
@@ -66,7 +84,9 @@ export default async function EvidencePage() {
               <TableHead>Klassificering</TableHead>
               <TableHead>Incident</TableHead>
               <TableHead>SHA-256</TableHead>
+              <TableHead>Bevarande</TableHead>
               <TableHead>Legal hold</TableHead>
+              <TableHead>Uppladdad av</TableHead>
               <TableHead>Uppladdad</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -74,8 +94,9 @@ export default async function EvidencePage() {
           <TableBody>
             {(evidence ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-muted-foreground">
-                  Inga bevis uppladdade ännu.
+                <TableCell colSpan={10} className="text-muted-foreground">
+                  Inga bevis uppladdade ännu. Ladda upp den första filen nedan —
+                  hash, åtkomstlogg och spårbarhetskedja skapas automatiskt.
                 </TableCell>
               </TableRow>
             ) : (
@@ -94,7 +115,15 @@ export default async function EvidencePage() {
                   <TableCell className="font-mono text-xs">
                     {String(e.hash_sha256).slice(0, 12)}…
                   </TableCell>
+                  <TableCell>
+                    {e.retention_until
+                      ? new Date(e.retention_until).toLocaleDateString("sv-SE")
+                      : "Tillsvidare"}
+                  </TableCell>
                   <TableCell>{e.legal_hold ? <StatusBadge color="red">Ja</StatusBadge> : "Nej"}</TableCell>
+                  <TableCell className="max-w-40 truncate">
+                    {e.uploaded_by ? uploaderById.get(e.uploaded_by) ?? "–" : "–"}
+                  </TableCell>
                   <TableCell>{new Date(e.uploaded_at).toLocaleString("sv-SE")}</TableCell>
                   <TableCell>
                     <EvidenceDownloadButton

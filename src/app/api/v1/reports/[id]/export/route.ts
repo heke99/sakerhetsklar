@@ -1,5 +1,6 @@
 import { withApi, forbidden, notFound, badRequest } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
+import { assertSupportAccessAllows } from "@/lib/authz/support-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import {
@@ -20,6 +21,10 @@ export const GET = withApi<{ id: string }>(async (req, { actor, params, meta }) 
     .maybeSingle();
   if (!report) throw notFound("Report not found");
   if (!isTenantMember(actor, report.tenant_id)) throw forbidden();
+  await assertSupportAccessAllows(actor, report.tenant_id, "export", {
+    type: "incident_report",
+    id: params.id,
+  });
   if (!hasPermission(actor, report.tenant_id, "exports.generate")) {
     throw forbidden("exports.generate permission required");
   }

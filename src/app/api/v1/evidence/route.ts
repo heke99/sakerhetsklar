@@ -51,7 +51,8 @@ export const POST = withApi(async (req, { actor, meta }) => {
   if (!hasPermission(actor, tenantId, "evidence.write")) {
     throw forbidden("evidence.write permission required");
   }
-  if (file.size > 50 * 1024 * 1024) throw badRequest("Max file size is 50 MB");
+  // File type/size policy (incl. plan-based limits) is enforced in the
+  // evidence service via lib/evidence/file-policy.
 
   const evidence = await uploadEvidence(actor, {
     tenantId,

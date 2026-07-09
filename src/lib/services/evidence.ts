@@ -2,11 +2,18 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
+import { ApiError } from "@/lib/api/handler";
+import { getTenantControlPlaneClient, getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { hasPermission } from "@/lib/authz/context";
+import { assertSupportAccessAllows } from "@/lib/authz/support-guards";
 import { assertTenantEntity } from "@/lib/authz/tenant-guards";
+import { validateEvidenceFile } from "@/lib/evidence/file-policy";
+import {
+  isMalwareScanRequired,
+  scanEvidenceFile,
+} from "@/lib/evidence/malware-scan";
 
 const RESTRICTED_CLASSIFICATIONS = [
   "strictly_confidential",
@@ -30,6 +37,9 @@ export async function uploadEvidence(
 ) {
   const admin = await getTenantDataPlaneClient(input.tenantId);
 
+  // Support-only actors need read_write scope + include_evidence.
+  await assertSupportAccessAllows(actor, input.tenantId, "evidence_upload");
+
   // Linked entities must belong to the same tenant as the evidence.
   if (input.incidentId) {
     await assertTenantEntity("incidents", input.incidentId, input.tenantId);
@@ -38,7 +48,48 @@ export async function uploadEvidence(
     await assertTenantEntity("controls", input.controlId, input.tenantId);
   }
 
+  // File policy: type allowlist/blocklist + plan-based size limit.
+  const control = getTenantControlPlaneClient();
+  const { data: tenantRow } = await control
+    .from("tenants")
+    .select("plan")
+    .eq("id", input.tenantId)
+    .maybeSingle();
+  const policy = validateEvidenceFile({
+    fileName: input.file.name,
+    sizeBytes: input.file.size,
+    plan: tenantRow?.plan ?? null,
+  });
+  if (!policy.ok) {
+    throw new ApiError(422, policy.reasonSv, policy.code);
+  }
+
   const bytes = Buffer.from(await input.file.arrayBuffer());
+
+  // Malware scan hook: fail closed when scanning is required but the scanner
+  // is unavailable; reject infected files outright.
+  const scan = await scanEvidenceFile(bytes);
+  if (scan.status === "infected") {
+    await writeAuditLog({
+      tenantId: input.tenantId,
+      actorUserId: actor.userId,
+      action: "evidence.upload_blocked_malware",
+      entityType: "evidence",
+      entityId: null,
+      newValue: { fileName: input.file.name, detail: scan.detail },
+    });
+    throw new ApiError(422, "Filen stoppades av skadlig kod-kontrollen.", "malware_detected");
+  }
+  if (
+    (scan.status === "unavailable" || scan.status === "skipped") &&
+    isMalwareScanRequired()
+  ) {
+    throw new ApiError(
+      503,
+      "Skanning av skadlig kod krävs men är inte tillgänglig just nu. Försök igen senare.",
+      "malware_scan_unavailable",
+    );
+  }
   const hash = createHash("sha256").update(bytes).digest("hex");
   const safeName = input.file.name.replace(/[^a-zA-Z0-9._åäöÅÄÖ-]/g, "_");
   const storagePath = `${input.tenantId}/${Date.now()}-${safeName}`;
@@ -146,6 +197,13 @@ export async function getEvidenceDownloadUrl(
   input: { tenantId: string; evidenceId: string; reason?: string; ipAddress?: string | null },
 ) {
   const admin = await getTenantDataPlaneClient(input.tenantId);
+
+  // Support-only actors must hold include_evidence on their active grant.
+  await assertSupportAccessAllows(actor, input.tenantId, "evidence_download", {
+    type: "evidence",
+    id: input.evidenceId,
+  });
+
   const { data: evidence } = await admin
     .from("evidence")
     .select("*")
