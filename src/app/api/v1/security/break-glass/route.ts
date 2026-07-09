@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withApi, ok, parseBody, forbidden } from "@/lib/api/handler";
 import { hasPlatformRole, hasTenantRole } from "@/lib/authz/context";
 import { endBreakGlass, startBreakGlass } from "@/lib/services/security";
+import { assertEntitlement } from "@/lib/services/entitlements";
 
 const startSchema = z.object({
   tenantId: z.string().uuid(),
@@ -20,6 +21,7 @@ export const POST = withApi(async (req, { actor }) => {
   ) {
     throw forbidden("Break-glass requires tenant admin/CISO or platform security role");
   }
+  await assertEntitlement(input.tenantId, "break_glass");
   const session = await startBreakGlass(actor, input);
   return ok(session, { status: 201 });
 });

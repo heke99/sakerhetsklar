@@ -13,6 +13,7 @@ import {
 import { TENANT_ROLE_LABELS_SV, type TenantRole } from "@/lib/authz/roles";
 import { hasTenantRole } from "@/lib/authz/context";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
+import { hasEntitlement } from "@/lib/services/entitlements";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { BreakGlassControls } from "./break-glass-controls";
@@ -29,6 +30,7 @@ export default async function AccessReviewPage() {
   if (!current) redirect("/login");
   const { tenant, actor } = current;
   const canDecideSupport = hasTenantRole(actor, tenant.id, ["tenant_admin", "ciso"]);
+  const breakGlassEntitled = await hasEntitlement(tenant.id, "break_glass");
 
   const admin = getAdminClient();
   const [membersRes, assignmentsRes, breakGlassRes, anomaliesRes, supportRes] =
@@ -168,17 +170,19 @@ export default async function AccessReviewPage() {
         </div>
       </section>
 
-      <BreakGlassControls
-        tenantId={tenant.id}
-        sessions={(breakGlassRes.data ?? []).map((b) => ({
-          id: b.id,
-          reason: b.reason,
-          scope: b.scope,
-          status: b.status,
-          startedAt: b.started_at,
-          expiresAt: b.expires_at,
-        }))}
-      />
+      {breakGlassEntitled ? (
+        <BreakGlassControls
+          tenantId={tenant.id}
+          sessions={(breakGlassRes.data ?? []).map((b) => ({
+            id: b.id,
+            reason: b.reason,
+            scope: b.scope,
+            status: b.status,
+            startedAt: b.started_at,
+            expiresAt: b.expires_at,
+          }))}
+        />
+      ) : null}
 
       <section className="mt-8">
         <h2 className="mb-3 text-lg font-semibold">Säkerhetsavvikelser</h2>

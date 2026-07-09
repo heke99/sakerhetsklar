@@ -1,6 +1,7 @@
 import { withApi, forbidden, requireTenantIdParam } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
 import { assertSupportAccessAllows } from "@/lib/authz/support-guards";
+import { assertEntitlement } from "@/lib/services/entitlements";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import { buildProcurementPackage } from "@/lib/exports/procurement";
@@ -8,6 +9,7 @@ import { buildProcurementPackage } from "@/lib/exports/procurement";
 export const GET = withApi(async (req, { actor, meta }) => {
   const tenantId = requireTenantIdParam(req);
   await assertSupportAccessAllows(actor, tenantId, "export");
+  await assertEntitlement(tenantId, "procurement_package");
   if (!hasPermission(actor, tenantId, "procurement.generate")) {
     throw forbidden("procurement.generate permission required");
   }

@@ -1,6 +1,7 @@
 import { withApi, badRequest, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
 import { assertSupportAccessAllows } from "@/lib/authz/support-guards";
+import { assertEntitlement } from "@/lib/services/entitlements";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import { buildBoardReport, buildSupervisoryPackage } from "@/lib/exports/packages";
@@ -16,6 +17,7 @@ export const GET = withApi(async (req, { actor, meta }) => {
 
   if (!tenantId) throw notFound("tenantId is required");
   await assertSupportAccessAllows(actor, tenantId, "export");
+  await assertEntitlement(tenantId, "exports");
   if (!hasPermission(actor, tenantId, "exports.generate")) {
     throw forbidden("exports.generate permission required");
   }

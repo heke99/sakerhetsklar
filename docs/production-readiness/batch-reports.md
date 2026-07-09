@@ -179,6 +179,28 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 15 — Billing, plans and entitlements
+
+### Entitlement engine
+
+- Pure resolver `src/lib/entitlements/resolve.ts` (unit-tested): tenant override (`tenant_feature_flags` with `ent:` prefix — the explicit, reasoned path for complimentary/internal access) → plan row (`entitlements`) → **fail closed** (missing row = disabled/limit 0).
+- Service `src/lib/services/entitlements.ts`: `getEntitlement`, `hasEntitlement`, `assertEntitlement` (403 `feature_not_in_plan` with Swedish message), `assertUserLimitNotReached` (counts active members + pending invitations against the plan's `users` limit), 30s cache invalidated on plan change.
+- Seed `0014_seed_entitlement_matrix.sql`: complete matrix for starter/business/enterprise covering all gated keys (evidence bank, GDPR track, exports, advanced reporting, procurement, supplier risk, leadership, webhooks, API, SSO/SCIM, break-glass, IP allowlist, Model B/C) — required because the engine fails closed.
+
+### Backend enforcement
+
+War room actions, break-glass start, GDPR track writes, evidence upload, exports, procurement package, webhook registration, invitation creation (user limit), and **deployment model B/C switching** (requires `single_tenant`/`customer_owned_data_plane` entitlement in addition to the provisioned-plane check).
+
+### UI enforcement
+
+War-room page renders an "Ingår inte i er plan" panel instead of the module; break-glass controls hidden on access review without entitlement; plan visible in settings; plan assignment via platform UI (Batch 11) is audited and invalidates the entitlement cache.
+
+### Tests
+
+`resolve.test.ts` — plan rows, disabled rows, fail-closed default, override grant/revoke, key isolation. 261 tests green.
+
+---
+
 ## Batch 14 — API, OpenAPI and integration contract
 
 ### OpenAPI

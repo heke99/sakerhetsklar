@@ -8,6 +8,10 @@ import {
   isTenantMember,
 } from "@/lib/authz/context";
 import { invalidateDataPlaneCache } from "@/lib/server/data-plane";
+import {
+  assertEntitlement,
+  invalidateEntitlementsCache,
+} from "@/lib/services/entitlements";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -67,6 +71,13 @@ export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
     input.deploymentModel !== "multi_tenant" &&
     input.deploymentModel !== previous.deployment_model
   ) {
+    // Model B/C is an entitlement-gated capability.
+    await assertEntitlement(
+      params.id,
+      input.deploymentModel === "single_tenant"
+        ? "single_tenant"
+        : "customer_owned_data_plane",
+    );
     const { data: connection } = await admin
       .from("tenant_data_plane_connections")
       .select("status, supabase_url, service_role_key_ref")
@@ -108,6 +119,7 @@ export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
   if (error) throw new Error(error.message);
 
   if (input.deploymentModel) invalidateDataPlaneCache(params.id);
+  if (input.plan) invalidateEntitlementsCache(params.id);
 
   await writeAuditLog({
     tenantId: params.id,

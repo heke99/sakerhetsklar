@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withApi, ok, parseBody, forbidden, notFound, requireTenantIdParam } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
 import { assertIncidentTenant } from "@/lib/authz/tenant-guards";
+import { assertEntitlement } from "@/lib/services/entitlements";
 import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -42,6 +43,7 @@ export const POST = withApi<{ id: string }>(async (req, { actor, params }) => {
   if (!hasPermission(actor, input.tenantId, "war_room.access")) {
     throw forbidden("war_room.access permission required");
   }
+  await assertEntitlement(input.tenantId, "war_room");
   await assertIncidentTenant(actor, params.id, input.tenantId);
 
   const admin = await getTenantDataPlaneClient(input.tenantId);

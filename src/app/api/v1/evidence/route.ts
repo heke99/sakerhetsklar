@@ -2,6 +2,7 @@ import { withApi, ok, badRequest, forbidden, requireTenantIdParam } from "@/lib/
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
 import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { uploadEvidence } from "@/lib/services/evidence";
+import { assertEntitlement } from "@/lib/services/entitlements";
 
 export const GET = withApi(async (req, { actor }) => {
   const tenantId = requireTenantIdParam(req);
@@ -50,6 +51,7 @@ export const POST = withApi(async (req, { actor, meta }) => {
   if (!hasPermission(actor, tenantId, "evidence.write")) {
     throw forbidden("evidence.write permission required");
   }
+  await assertEntitlement(tenantId, "evidence_bank");
   // File type/size policy (incl. plan-based limits) is enforced in the
   // evidence service via lib/evidence/file-policy.
 

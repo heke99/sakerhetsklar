@@ -5,6 +5,7 @@ import { hasPermission, isTenantMember } from "@/lib/authz/context";
 import { assertIncidentTenant } from "@/lib/authz/tenant-guards";
 import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
+import { assertEntitlement } from "@/lib/services/entitlements";
 
 export const GET = withApi(async (req, { actor }) => {
   const tenantId = req.nextUrl.searchParams.get("tenantId");
@@ -55,6 +56,7 @@ export const POST = withApi(async (req, { actor }) => {
     throw forbidden("gdpr.write permission required");
   }
   await assertIncidentTenant(actor, input.incidentId, input.tenantId);
+  await assertEntitlement(input.tenantId, "gdpr_track");
 
   const admin = await getTenantDataPlaneClient(input.tenantId);
   const { data: existing } = await admin

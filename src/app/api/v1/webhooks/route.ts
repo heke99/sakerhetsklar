@@ -4,6 +4,7 @@ import { withApi, ok, parseBody, forbidden, requireTenantIdParam } from "@/lib/a
 import { hasTenantRole } from "@/lib/authz/context";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
+import { assertEntitlement } from "@/lib/services/entitlements";
 import { enqueueWebhookEvent } from "@/lib/services/webhooks";
 
 export const GET = withApi(async (req, { actor }) => {
@@ -31,6 +32,7 @@ export const POST = withApi(async (req, { actor }) => {
   if (!hasTenantRole(actor, input.tenantId, ["tenant_admin"])) {
     throw forbidden("Only tenant admins can manage webhooks");
   }
+  await assertEntitlement(input.tenantId, "webhooks");
 
   const admin = getAdminClient();
   const { data, error } = await admin

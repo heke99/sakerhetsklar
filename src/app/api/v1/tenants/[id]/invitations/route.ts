@@ -9,6 +9,7 @@ import {
   resendInvitation,
   revokeInvitation,
 } from "@/lib/services/invitations";
+import { assertUserLimitNotReached } from "@/lib/services/entitlements";
 
 function canManageInvitations(
   actor: Parameters<typeof hasTenantRole>[0],
@@ -43,6 +44,7 @@ export const POST = withApi<{ id: string }>(async (req, { actor, params }) => {
     throw forbidden("Only tenant admins can invite users");
   }
   const input = await parseBody(req, inviteSchema);
+  await assertUserLimitNotReached(params.id);
   const { invitation, inviteUrl, emailDelivered } = await createInvitation(actor, {
     tenantId: params.id,
     email: input.email,

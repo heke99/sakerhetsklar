@@ -6,6 +6,7 @@ import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge } from "@/components/app/status-badge";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
 import { getAdminClient } from "@/lib/server/supabase-admin";
+import { hasEntitlement } from "@/lib/services/entitlements";
 
 import { WarRoomPanel } from "./war-room-panel";
 
@@ -21,6 +22,31 @@ export default async function WarRoomPage({
   if (!current) redirect("/login");
   const { tenant } = current;
   const { id } = await params;
+
+  // Entitlement-aware UI: the war room is a plan-gated module.
+  if (!(await hasEntitlement(tenant.id, "war_room"))) {
+    return (
+      <main className="p-8">
+        <PageHeader
+          title="Krisrum"
+          description="Samlad ledning av allvarliga incidenter: beslut, uppgifter, deadlines, rapporter och bevis."
+        />
+        <div className="max-w-xl rounded-xl border bg-card p-6">
+          <h2 className="text-lg font-semibold">Ingår inte i er plan</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Krisrummet ingår inte i er nuvarande plan. Kontakta er
+            organisationsadministratör eller Säkerhetsklar för uppgradering.
+          </p>
+          <Link
+            href={`/app/incidents/${id}`}
+            className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
+          >
+            Tillbaka till incidenten
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   const admin = getAdminClient();
   const [incidentRes, warRoomRes, deadlinesRes, reportsRes, evidenceRes] = await Promise.all([
