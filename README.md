@@ -37,24 +37,50 @@ with the organization.
 The project uses **npm** with `package-lock.json` as the single source of truth.
 
 ```bash
+# 1. Install dependencies
 npm ci
+
+# 2. Configure environment
+cp .env.example .env.local   # then fill in the values
+
+# 3. Apply database migrations (requires SUPABASE_DB_URL)
+npm run db:migrate
+
+# 4. Apply seed data (reference data; demo data only with SEED_DEMO=1)
+npm run db:seed
+
+# 5. Start the dev server
 npm run dev
 ```
 
-Environment variables (see `.env.example`):
+Environment variables are documented in [`.env.example`](.env.example). The most important:
 
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL (safe to expose).
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — publishable key (safe to expose).
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only. Never expose to the frontend.
-- `SUPABASE_DB_URL` — server-only connection string used by migrations/tests.
+- `SUPABASE_DB_URL` — server-only connection string used by migrations/seeds/tests.
+- `APP_BASE_URL` — public base URL used in invitation/password-reset links.
+- `JOB_RUNNER_SECRET` — shared secret for scheduled job endpoints (jobs fail closed without it).
+- `WEBHOOK_SIGNING_SECRET` — HMAC secret for outbound webhooks.
+- `RESEND_API_KEY` / `EMAIL_FROM` — optional; enables transactional email.
 
-Run database migrations with the Supabase CLI:
+At server startup, required variables are validated (`src/instrumentation.ts`);
+a production deployment with missing configuration refuses to start with a clear
+error listing the missing variables. Secrets are never bundled into client code —
+only `NEXT_PUBLIC_*` variables reach the browser.
 
-```bash
-supabase db push        # or apply files in supabase/migrations in order
-```
+### Required external services
 
-Seed data (no real PII) lives in `supabase/seed`.
+- **Supabase** (Postgres + Auth + Storage) — the only hard dependency.
+- **Resend** (optional) — transactional email for invitations/password reset/notifications.
+- **A scheduler** (Vercel Cron or equivalent) — calls `/api/v1/jobs/*` endpoints with the `x-job-secret` header. See `vercel.json`.
+
+### Production deployment notes
+
+- Build with `npm run build` — no network access is required at build time (system font stack, no Google Fonts).
+- Run migrations against each data plane before deploying a new app version: `npm run db:migrate`.
+- Never seed demo data in production: `npm run db:seed` skips `0012_seed_demo.sql` unless `SEED_DEMO=1` is set explicitly.
+- Set all variables listed as required in `.env.example`; startup fails fast otherwise.
 
 ## Scripts
 
@@ -63,7 +89,9 @@ Seed data (no real PII) lives in `supabase/seed`.
 - `npm run lint` — lint.
 - `npm run typecheck` — strict TypeScript check.
 - `npm run test` — run unit tests (Vitest).
-- `npm run db:test` — run database migration + RLS tests against a local Postgres (see `scripts/db-test.sh`).
+- `npm run db:migrate` — apply all SQL migrations to `SUPABASE_DB_URL`.
+- `npm run db:seed` — apply seed data to `SUPABASE_DB_URL` (demo seed skipped unless `SEED_DEMO=1`).
+- `npm run db:test` — recreate a scratch database, apply migrations + seeds and run the SQL RLS test suite (see `scripts/db-test.sh`).
 
 ## Documentation
 

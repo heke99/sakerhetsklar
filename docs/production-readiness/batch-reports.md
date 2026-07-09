@@ -78,3 +78,18 @@ P2:
 `npm run build` green with **zero warnings**; `typecheck`, `lint`, `test` (80/80) green.
 
 ---
+
+## Batch 2 — Environment configuration and local setup
+
+### Changes
+
+- **`.env.example` created** with every variable the codebase actually reads (core Supabase vars, `SUPABASE_DB_URL`, `APP_BASE_URL`, `APP_PRIMARY_HOSTS`, `JOB_RUNNER_SECRET`, `WEBHOOK_SIGNING_SECRET`), optional integrations (`RESEND_API_KEY`, `EMAIL_FROM`, `TEAMS_WEBHOOK_URL`, `SENTRY_DSN`, `SUPABASE_STORAGE_BUCKET`), a section explaining Model B/C secret refs, and reserved-but-unused vars kept commented out (Stripe, OIDC, SAML) so nobody sets dead configuration. `.gitignore` updated (`!.env.example`).
+- **Startup validation**: `validateServerEnv()` in `src/lib/server/env.ts`, invoked from the new `src/instrumentation.ts`. In production a missing required var aborts startup with a clear list; in dev it logs a warning. Added `env.appBaseUrl` and `env.storageBucket` getters.
+- **DB npm scripts**: `db:migrate` (`scripts/db-migrate.sh`), `db:seed` (`scripts/db-seed.sh`), `db:test` (existing `scripts/db-test.sh`). The seed script **skips the demo seed by default** — it only runs with explicit `SEED_DEMO=1` (closes a P0 from the audit: fictional demo tenants can no longer reach production databases through the standard tooling).
+- **README rewritten setup section**: numbered install → env → migrate → seed → dev steps, per-variable docs, required external services, and production deployment notes.
+
+### Verification
+
+`typecheck`, `lint`, `build` green.
+
+---

@@ -39,6 +39,14 @@ export const env = {
       .map((h) => h.trim().toLowerCase())
       .filter(Boolean);
   },
+  get appBaseUrl(): string {
+    return (
+      optionalEnv("APP_BASE_URL")?.replace(/\/$/, "") ?? "http://localhost:3000"
+    );
+  },
+  get storageBucket(): string {
+    return optionalEnv("SUPABASE_STORAGE_BUCKET") ?? "evidence";
+  },
   get isConfigured(): boolean {
     return Boolean(
       process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -46,3 +54,30 @@ export const env = {
     );
   },
 };
+
+/** Env vars that must be present for the app to run in production. */
+const REQUIRED_IN_PRODUCTION = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "APP_BASE_URL",
+  "JOB_RUNNER_SECRET",
+  "WEBHOOK_SIGNING_SECRET",
+] as const;
+
+/**
+ * Startup validation (called from instrumentation.ts). In production every
+ * required variable must be set — the server refuses to start otherwise so
+ * misconfiguration is caught at deploy time, not at first customer request.
+ * In development/test we only log a warning to keep local setup friction low.
+ */
+export function validateServerEnv(): void {
+  const missing = REQUIRED_IN_PRODUCTION.filter((name) => !process.env[name]);
+  if (missing.length === 0) return;
+
+  const message = `Missing required environment variables: ${missing.join(", ")} (see .env.example)`;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(message);
+  }
+  console.warn(`[env] ${message}`);
+}
