@@ -1,5 +1,9 @@
+import { redirect } from "next/navigation";
+
 import type { NavSection } from "@/components/app/sidebar-nav";
 import { SidebarNav } from "@/components/app/sidebar-nav";
+import { checkAuthGate } from "@/lib/services/auth-policy";
+import { getCurrentTenant } from "@/lib/services/current-tenant";
 
 const sections: NavSection[] = [
   {
@@ -53,11 +57,19 @@ const sections: NavSection[] = [
   },
 ];
 
-export default function TenantAppLayout({
+export default async function TenantAppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Fail-closed enforcement of tenant auth requirements (SSO/MFA) on every
+  // tenant page load. Blocked sessions are sent to an explanation page.
+  const current = await getCurrentTenant();
+  if (current) {
+    const gate = await checkAuthGate(current.tenant.id);
+    if (gate.blocked) redirect(`/auth-blocked?reason=${gate.reason}`);
+  }
+
   return (
     <div className="flex min-h-screen">
       <SidebarNav sections={sections} brand="Säkerhetsklar" brandHref="/app/overview" />

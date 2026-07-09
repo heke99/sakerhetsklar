@@ -47,9 +47,10 @@ export default async function PlatformIntegrationsPage() {
             {(integrations ?? []).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-muted-foreground">
-                  No integrations configured. MVP set: Excel import, PDF/Word export,
-                  email intake, Teams notifications, webhook API, Entra ID/OIDC/SAML,
-                  evidence upload, copy-to-Cyberportalen.
+                  No integrations configured. Available today: Excel import, PDF/Word
+                  export, webhook API, Teams notifications, evidence upload,
+                  copy-to-Cyberportalen. Entra ID/OIDC/SAML SSO requires per-tenant
+                  provisioning and fails closed until configured.
                 </TableCell>
               </TableRow>
             ) : (
