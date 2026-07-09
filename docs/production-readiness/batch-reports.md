@@ -179,169 +179,85 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
-## Batch 19 — Accessibility, public sector quality and UX hardening
+## Batch 6 — Model A/B/C data-plane architecture (P0)
+
+### Abstraction
+
+New `src/lib/server/data-plane.ts`:
+
+- `resolveTenantDeploymentModel(tenantId)`, `getTenantControlPlaneClient()`, `getTenantDataPlaneClient(tenantId)`, `assertDataPlaneReady(tenantId)`, `filterTenantsWithUnreadyDataPlane(ids)`, `invalidateDataPlaneCache()`.
+- Model A → central tenant-aware admin client. Model B/C → isolated Supabase client from `tenant_data_plane_connections` (active + `supabase_url` + secret resolvable from env ref). Anything less throws `DataPlaneNotReadyError` — **there is no fallback to the central database**.
+- 30s TTL cache with explicit invalidation on deployment-model change.
+
+### Fail-closed enforcement at the identity layer
+
+`getActorContext` now **drops memberships and support access for any Model B/C tenant whose data plane is not ready** — every `isTenantMember`/`hasPermission` check across all routes and pages denies access until provisioning completes. This makes fail-closed behavior global rather than per-refactored-callsite.
+
+### Service and route refactor
+
+- Services now split control-plane (tenants registry, tenant_settings, rule packages, role assignments, notifications, reference data) from tenant-plane (incidents, reports, evidence incl. storage, scope/size assessments, deadlines, controls, readiness inputs) access: `incidents`, `reports`, `evidence`, `significance`, `deadlines`, `scope`, `readiness` all obtain the tenant client via `getTenantDataPlaneClient`.
+- Tenant-guard entity checks (`assertTenantEntity` etc.) run against the claimed tenant's data plane.
+- 20 tenant-data API route files refactored from `getAdminClient()` to the data-plane client. Anomaly telemetry, audit logs, support access, tenant registry and jobs intentionally stay control-plane (documented in module docstring). Escalation/anomaly jobs process the central (Model A) plane; B/C planes run their own scheduler per the deployment docs.
+- `PATCH /tenants/[id]`: switching a tenant to Model B/C now returns **409 `data_plane_not_ready`** unless a fully provisioned active connection with resolvable secret exists — the platform cannot silently lock out a tenant or leave B/C "selected" while data flows centrally.
+
+### Tests
+
+`data-plane.test.ts` — 8 tests: Model A passthrough; B/C with no connection / inactive connection / missing secret all throw `DataPlaneNotReadyError`; **no central fallback ever occurs for B/C**; fully provisioned B returns the isolated client; unknown tenants are treated as unready (fail closed). 118 unit tests green.
+
+---
+
+## Batch 7 — Rule engine and legal source management
+
+### Source verification (data-driven, versioned)
+
+- Migration `0020_rule_verification.sql`: `last_verified_at`, `verified_by`, `source_note` on `regulatory_rule_sets` + `regulatory_rules`; `last_verified_at`/`verified_by` on `legal_sources`.
+- Seed `0013_seed_source_verification.sql`: official source URLs and verification stamps, **verified against official sources on 2026-07-09**: Cybersäkerhetslag (2025:1506) and Cybersäkerhetsförordning (2025:1507) via riksdagen.se (in force 2026-01-15, ordinance amended t.o.m. SFS 2026:623); MCFFS 2026:8 via mcf.se (in force 2026-07-01, reporting via cyberportalen to NCSC/CERT-SE). **Correction found during verification**: the MCFFS series is issued by Myndigheten för civilt försvar (MCF), not MSB — publisher fixed in seed. EU 2024/2690, GDPR and eIDAS linked to EUR-Lex. MCFFS 2026:11/2026:12 remain `pending` until guidance exists; PTS track remains draft/partial with mandatory manual review.
+
+### De-hardcoded frontend legal copy
+
+- GDPR track page: the "72 timmar" description now comes from the `regulatory_tracks` registry (GDPR_IMY row) with a cautious fallback that points to the rule profile instead of asserting a deadline.
+- Controls page: the "MCFFS 2026:11 träder i kraft 1 oktober 2026" line is now rendered from `regulatory_rule_sets.effective_from`/`status` — it disappears automatically when the rule set becomes active.
+- Both pages also moved their tenant queries onto the data-plane client.
+- Decision documented: `deriveRulePackages` remains TS orchestration, but all package **content** (status, coverage, version, effectivity) is read from the DB when packages are assigned and displayed; the mapping itself is code-reviewed logic covered by unit tests. Engines already return `manual_review_required`/confidence and matched rules with legal references.
+
+### Disclaimer coverage
+
+`DecisionSupportDisclaimer` added to late-reporting, war-room, recipients, incidents list, reports list and management pages; a short disclaimer line added to the login card. All assessment-adjacent screens now carry it.
+
+---
+
+## Batch 8 — Scope assessment, onboarding and customer readiness
 
 ### Changes
 
-- **Skip links** ("Hoppa till innehåll"/"Skip to content") added to both tenant and platform layouts, targeting the main content region.
-- **Print/export-friendly pages**: `@media print` rules hide navigation chrome and normalize colors so report pages print cleanly.
-- **Destructive-action confirmations** completed: break-glass session end now confirms (member deactivation, invitation revocation, tenant suspend/delete already confirm from earlier batches; tenant deletion requires typing the exact name).
-
-### Verified existing state (audit)
-
-- Buttons/inputs have consistent `focus-visible` rings (shadcn base); sidebar uses `nav aria-label` + `aria-current="page"`; onboarding wizard steps use `aria-current="step"`, `role`d alerts/status messages exist on all new client forms (`role="alert"`/`role="status"`).
-- Status is never conveyed by color alone — every `StatusBadge` carries a Swedish text label (Batch 12).
-- All form fields introduced in batches 4–15 have explicit `<Label htmlFor>`, help texts and Swedish validation messages; Swedish date/time formatting (`sv-SE`) is used consistently.
-- `<html lang="sv">`; loading states expose `aria-busy` + `sr-only` text (Batch 12).
-
----
-
-## Batch 18 — Backup, restore, retention and data exit
-
-### Operational hooks
-
-- New `DELETE /api/v1/tenants/[id]`: platform owner only, requires typing the exact tenant name + a ≥10-char reason, **blocked with 409 while active legal holds exist**, soft-deletes (recoverable until manual purge per exit plan), audited as `tenant.deleted` with reason. Documented in OpenAPI + contract-tested.
-- Legal-hold deletion blocking at the DB level was delivered in Batch 10 (migration 0023 triggers) — referenced here as the enforcement backbone.
-- Tenant export verified: the supervisory package ZIP contains 20 structured JSON sections + an evidence manifest with SHA-256 hashes; support-access without `allow_export` is denied and logged.
-
-### Documentation
-
-New `docs/runbooks/data-lifecycle.md` ties the technical controls to operations: suspension, deliberate deletion flow, legal hold (API + trigger layers), retention (never deletes held evidence; audit-log retention separated), exit package contents and the **Model A/B/C responsibility matrix** (backup, retention runs, purge). Existing `backup-restore.md` (PITR, quarterly restore tests with hash verification) and `exit-plan/export-and-deletion.md` confirmed accurate; subprocessor list and DPA/PUB appendix already ship in the procurement package.
+- Migration `0021_onboarding_contacts.sql`: structured onboarding facts on `tenant_settings` — incident contact, reporting contact, management owner, DPO contact, SSO requirement preference, data-residency requirement, deployment model preference.
+- New `PUT /api/v1/onboarding` saves the contact/requirement facts (tenant admin/CISO only, audited).
+- New `GET/POST /api/v1/legal-entities` (tenant-scoped, audited) so the previously hollow legal-entities step can capture real data.
+- **Onboarding wizard filled in**:
+  - Legal entities step: lists existing entities + inline quick-add form (name/orgnr).
+  - Incident roles step: live checklist of the six incident roles against actual `role_assignments` (green/missing indicators), plus a full contact form (incident/reporting/management/DPO) and requirement preferences (data residency, deployment model with "kräver provisionering" labels, SSO). Saving contacts is required to complete the step.
+  - Systems/vendors steps: live counts from the register with warnings when empty.
+  - Completion step: NIS2-readiness score and register counts before finishing.
+- Onboarding page now loads via the data-plane abstraction and passes readiness (`computeReadiness`) into the wizard; dashboard already reflects `tenants.onboarding_status`, which the POST endpoint recomputes on every step change.
 
 ---
 
-## Batch 17 — Observability, health checks and operational readiness
+## Batch 9 — Incident and reporting workflow end-to-end
 
-### Endpoints
+### Workflow controls implemented
 
-- `/api/v1/health` — public liveness only: status, service, app version, time. No dependencies probed, nothing sensitive.
-- New `/api/v1/health/readiness` — requires **platform admin session or the job secret** (external monitoring): DB connectivity, storage bucket access, migration marker (probes a column from the newest migration series), job secret/email/webhook-signing configuration presence, rule package verification freshness (degraded > 180 days), and per-tenant Model B/C data-plane readiness (count of unready planes — all fail closed). Overall status ok/degraded/failed with 503 on failure; contract-tested and documented in OpenAPI.
-
-### Structured logging
-
-New `src/lib/server/log.ts` — single-line JSON logs (`ts`, `level`, `event`, fields; never secrets/PII). Wired into the API error handler (path+method on unhandled errors) and readiness warnings. `SENTRY_DSN` remains a documented reserved variable; no mock integration was added.
-
-### Existing observability confirmed
-
-Audit viewer (`/platform/audit`, `/api/v1/audit`), tenant health page (`/platform/health` from `tenant_health_checks`/`tenant_backup_status`), integration status page, and per-domain access/export/download logs.
-
----
-
-## Batch 16 — CI/CD, migration tests and dependency security
-
-### CI (`.github/workflows/ci.yml`)
-
-- **build-and-test** job: `npm ci` → typecheck → lint → unit + contract tests → production build → `npm audit --audit-level=high` (blocks on high/critical).
-- **database-tests** job: Postgres 16 service container, runs `scripts/db-test.sh` (shim + all migrations + all seeds + the three SQL test suites: tenant isolation, support access, tenant integrity), then re-applies migrations 0019+ to verify idempotency (verified locally too: 0019–0023 re-apply cleanly). Migrations 0001–0018 are strictly ordered/apply-once (documented in the workflow).
-
-### Dependency security
-
-- Dependabot config: weekly grouped npm updates + GitHub Actions updates.
-- `docs/security/dependency-audit.md`: `npm audit` = **0 high/critical**; the 2 moderate advisories (`postcss` via next, `uuid` via exceljs) documented with severity, path, impact assessment ("not exploitable in this product") and decision (accept; forced fixes are breaking downgrades). Review process defined.
-
----
-
-## Batch 15 — Billing, plans and entitlements
-
-### Entitlement engine
-
-- Pure resolver `src/lib/entitlements/resolve.ts` (unit-tested): tenant override (`tenant_feature_flags` with `ent:` prefix — the explicit, reasoned path for complimentary/internal access) → plan row (`entitlements`) → **fail closed** (missing row = disabled/limit 0).
-- Service `src/lib/services/entitlements.ts`: `getEntitlement`, `hasEntitlement`, `assertEntitlement` (403 `feature_not_in_plan` with Swedish message), `assertUserLimitNotReached` (counts active members + pending invitations against the plan's `users` limit), 30s cache invalidated on plan change.
-- Seed `0014_seed_entitlement_matrix.sql`: complete matrix for starter/business/enterprise covering all gated keys (evidence bank, GDPR track, exports, advanced reporting, procurement, supplier risk, leadership, webhooks, API, SSO/SCIM, break-glass, IP allowlist, Model B/C) — required because the engine fails closed.
-
-### Backend enforcement
-
-War room actions, break-glass start, GDPR track writes, evidence upload, exports, procurement package, webhook registration, invitation creation (user limit), and **deployment model B/C switching** (requires `single_tenant`/`customer_owned_data_plane` entitlement in addition to the provisioned-plane check).
-
-### UI enforcement
-
-War-room page renders an "Ingår inte i er plan" panel instead of the module; break-glass controls hidden on access review without entitlement; plan visible in settings; plan assignment via platform UI (Batch 11) is audited and invalidates the entitlement cache.
+- New pure validator `src/lib/reports/transitions.ts` (called from `setReportStatus`):
+  - Submission **requires prior approval** (was previously unenforced).
+  - Submission requires a **submission reference (Cyberportalen-ID)** or an explicit documented override reason; overrides are audited as `report.marked_submitted_without_reference`.
+  - The stage-id step continues to require id-or-override.
+- The legal deadline is marked `met` **only** as a consequence of a recorded submission (`incident_report_submissions` row) — never independently. Submission rows now carry the reference (`0022_submission_reference.sql`).
+- Report editor UI updated: step 3 now collects the Cyberportalen-ID (or a ≥10-char override reason) at submission time; buttons stay disabled otherwise.
+- Late reporting already requires structured reasons + `incidents.approve` permission for approval (verified); escalation job creates late-reporting records + remediation tasks idempotently (verified).
+- Deadline tracks verified through existing engine tests: 24h/72h/final-report/situation-report, state-agency 6h, GDPR/IMY 72h, eIDAS/PTS, manual-review paths.
 
 ### Tests
 
-`resolve.test.ts` — plan rows, disabled rows, fail-closed default, override grant/revoke, key isolation. 261 tests green.
-
----
-
-## Batch 14 — API, OpenAPI and integration contract
-
-### OpenAPI
-
-- Document extracted to `src/lib/api/openapi.ts` (route serves it unchanged) and extended with all endpoints added in batches 4–13: invitation lookup/accept (public + rate limits), member/invitation PATCH, legal entities, notifications, onboarding PUT, and the OpenAPI endpoint itself.
-- `info.description` now documents: auth model, tenant scoping (404-without-existence-leak semantics), the uniform error format, pagination behavior, rate limits, file upload/download, job-endpoint security (both header conventions) and outbound webhook signing (HMAC over `timestamp.body`, retry policy).
-
-### Contract tests
-
-`src/lib/api/openapi.test.ts` walks `src/app/api/v1/**/route.ts`, extracts implemented HTTP methods and asserts **bidirectional** consistency: every route documented with exactly its implemented methods, and no documented path without an implementation. Route/spec drift now fails CI. (+121 assertions; 255 tests total.)
-
-### Input validation
-
-New `requireTenantIdParam(req)` in the API handler: `tenantId` query params are now validated as UUIDs (400 on malformed input) across 22 list routes — previously raw strings reached the query layer. Body validation was already Zod-based on all JSON routes.
-
----
-
-## Batch 13 — Jobs, notifications, escalation and schedulers
-
-### Scheduling
-
-- `vercel.json` cron config: escalations every 15 min, webhook delivery every 5 min, anomaly scan hourly. Alternative schedulers documented (any runner that sends the secret).
-- New shared `src/lib/server/job-auth.ts`: timing-safe comparison, accepts `x-job-secret` **or** `Authorization: Bearer` (Vercel Cron `CRON_SECRET` convention). Fail closed when `JOB_RUNNER_SECRET` unset. All three job routes refactored to use it.
-
-### Notification fan-out (previously dead code)
-
-New `src/lib/services/notify.ts`: role-resolved in-app notifications + HMAC-signed webhook enqueue + Teams (per-tenant integration) + e-mail (when Resend configured), best-effort with logging. Wired to domain events:
-
-- `incident.created` → notify tenant_admin/ciso/incident_manager + webhook payload with incident metadata.
-- `report.approved` / `report.submitted` → notify + webhook (submission reference included when present).
-- Deadline escalations already create in-app notifications via the escalation job (verified; late deadlines create records + remediation tasks idempotently).
-
-### In-app inbox
-
-New `/app/notifications` page (severity badges, mark-all-read, per-notification open-and-mark-read) + self-scoped `GET/PATCH /api/v1/notifications` (user can only ever see/modify their own rows). Added to the tenant navigation.
-
-### Tests
-
-`job-auth.test.ts` — fail-closed without secret, wrong secret rejected, both header conventions accepted. 134 unit tests green.
-
----
-
-## Batch 12 — Tenant UI polish and complete customer workflow
-
-### Swedish labels
-
-New shared label module `src/lib/labels/sv.ts` (incident status, severity, report status, significance, plan, risk, task, classification, support, exercise, deadline, onboarding) with `svLabel()` fallback. Applied to incidents list/detail, reports list, report editor status, risks, exercises, evidence classifications, settings plan (Batch 4), support-access statuses (Batch 11). "War room" renamed to **"Krisrum"** across the tenant UI.
-
-### Landing page
-
-Removed all "demoöversikt"/"kundvy" demo framing — CTAs now point at login or the feature section; the hero dashboard mock is explicitly labeled "Exempelvy (illustration)".
-
-### Loading/error states
-
-Route-level `loading.tsx` (skeletons, `aria-busy`) and `error.tsx` (Swedish/English per surface, digest reference, retry button) for both `/app` and `/platform` segments — no more blank full-page waits or unhandled render errors.
-
-### Silent failure fixes
-
-`control-row.tsx` now surfaces API errors with `role="alert"` instead of swallowing failed PATCHes (pattern already followed by the newer client components from Batches 4–11).
-
----
-
-## Batch 11 — Platform admin / superadmin production UI
-
-### New write surfaces (all audited server-side)
-
-- **Tenant list** (`/platform/tenants`): "Create tenant" form (from Batch 4).
-- **Tenant profile** (`/platform/tenants/[id]`), new "Management" section:
-  - Plan assignment (starter/business/enterprise).
-  - Status: activate / pause / suspend with confirmation dialogs.
-  - Deployment model selection with explicit fail-closed messaging — Model B/C changes are rejected by the API (409) unless a provisioned active data-plane connection exists.
-  - **Request support access** form: purpose (min 10 chars), scope read-only/read-write, duration ≤ 72h, include-evidence and allow-export flags. Requires tenant approval.
-- **Invitations section** (from Batch 4): invite first tenant admin, resend, revoke; member count in overview.
-
-### Tenant-side support access workflow
-
-`/app/access-review` now has approve/deny buttons for `requested` grants and revoke (reason required) for `approved` grants, visible to tenant admin/CISO only. Status values display in Swedish. This closes the loop: platform requests → tenant approves → scoped, logged access → tenant/platform revokes.
-
-With Batches 4/6/11 combined, a new customer can be onboarded entirely through the UI: create tenant → set plan → (optionally provision data plane, switch model) → invite first admin → admin accepts → onboarding wizard. No manual SQL/API calls required for production operations.
+`transitions.test.ts` — 7 tests: approval-before-submission, reference-or-override on submission and stage close, override flagging, receipt step. Combined with existing engine tests this covers: significant NIS2 incident, non-significant, GDPR path, missing facts → manual review, late reporting steps, submission-reference gating. Cross-tenant reporting blocked is covered by Batch 3 guards/FK tests. 125 unit tests green.
 
 ---
 
@@ -371,85 +287,193 @@ Evidence page now shows retention status ("Bevarande"/Tillsvidare), uploader (re
 
 ---
 
-## Batch 9 — Incident and reporting workflow end-to-end
+## Batch 11 — Platform admin / superadmin production UI
 
-### Workflow controls implemented
+### New write surfaces (all audited server-side)
 
-- New pure validator `src/lib/reports/transitions.ts` (called from `setReportStatus`):
-  - Submission **requires prior approval** (was previously unenforced).
-  - Submission requires a **submission reference (Cyberportalen-ID)** or an explicit documented override reason; overrides are audited as `report.marked_submitted_without_reference`.
-  - The stage-id step continues to require id-or-override.
-- The legal deadline is marked `met` **only** as a consequence of a recorded submission (`incident_report_submissions` row) — never independently. Submission rows now carry the reference (`0022_submission_reference.sql`).
-- Report editor UI updated: step 3 now collects the Cyberportalen-ID (or a ≥10-char override reason) at submission time; buttons stay disabled otherwise.
-- Late reporting already requires structured reasons + `incidents.approve` permission for approval (verified); escalation job creates late-reporting records + remediation tasks idempotently (verified).
-- Deadline tracks verified through existing engine tests: 24h/72h/final-report/situation-report, state-agency 6h, GDPR/IMY 72h, eIDAS/PTS, manual-review paths.
+- **Tenant list** (`/platform/tenants`): "Create tenant" form (from Batch 4).
+- **Tenant profile** (`/platform/tenants/[id]`), new "Management" section:
+  - Plan assignment (starter/business/enterprise).
+  - Status: activate / pause / suspend with confirmation dialogs.
+  - Deployment model selection with explicit fail-closed messaging — Model B/C changes are rejected by the API (409) unless a provisioned active data-plane connection exists.
+  - **Request support access** form: purpose (min 10 chars), scope read-only/read-write, duration ≤ 72h, include-evidence and allow-export flags. Requires tenant approval.
+- **Invitations section** (from Batch 4): invite first tenant admin, resend, revoke; member count in overview.
 
-### Tests
+### Tenant-side support access workflow
 
-`transitions.test.ts` — 7 tests: approval-before-submission, reference-or-override on submission and stage close, override flagging, receipt step. Combined with existing engine tests this covers: significant NIS2 incident, non-significant, GDPR path, missing facts → manual review, late reporting steps, submission-reference gating. Cross-tenant reporting blocked is covered by Batch 3 guards/FK tests. 125 unit tests green.
+`/app/access-review` now has approve/deny buttons for `requested` grants and revoke (reason required) for `approved` grants, visible to tenant admin/CISO only. Status values display in Swedish. This closes the loop: platform requests → tenant approves → scoped, logged access → tenant/platform revokes.
+
+With Batches 4/6/11 combined, a new customer can be onboarded entirely through the UI: create tenant → set plan → (optionally provision data plane, switch model) → invite first admin → admin accepts → onboarding wizard. No manual SQL/API calls required for production operations.
 
 ---
 
-## Batch 8 — Scope assessment, onboarding and customer readiness
+## Batch 12 — Tenant UI polish and complete customer workflow
+
+### Swedish labels
+
+New shared label module `src/lib/labels/sv.ts` (incident status, severity, report status, significance, plan, risk, task, classification, support, exercise, deadline, onboarding) with `svLabel()` fallback. Applied to incidents list/detail, reports list, report editor status, risks, exercises, evidence classifications, settings plan (Batch 4), support-access statuses (Batch 11). "War room" renamed to **"Krisrum"** across the tenant UI.
+
+### Landing page
+
+Removed all "demoöversikt"/"kundvy" demo framing — CTAs now point at login or the feature section; the hero dashboard mock is explicitly labeled "Exempelvy (illustration)".
+
+### Loading/error states
+
+Route-level `loading.tsx` (skeletons, `aria-busy`) and `error.tsx` (Swedish/English per surface, digest reference, retry button) for both `/app` and `/platform` segments — no more blank full-page waits or unhandled render errors.
+
+### Silent failure fixes
+
+`control-row.tsx` now surfaces API errors with `role="alert"` instead of swallowing failed PATCHes (pattern already followed by the newer client components from Batches 4–11).
+
+---
+
+## Batch 13 — Jobs, notifications, escalation and schedulers
+
+### Scheduling
+
+- `vercel.json` cron config: escalations every 15 min, webhook delivery every 5 min, anomaly scan hourly. Alternative schedulers documented (any runner that sends the secret).
+- New shared `src/lib/server/job-auth.ts`: timing-safe comparison, accepts `x-job-secret` **or** `Authorization: Bearer` (Vercel Cron `CRON_SECRET` convention). Fail closed when `JOB_RUNNER_SECRET` unset. All three job routes refactored to use it.
+
+### Notification fan-out (previously dead code)
+
+New `src/lib/services/notify.ts`: role-resolved in-app notifications + HMAC-signed webhook enqueue + Teams (per-tenant integration) + e-mail (when Resend configured), best-effort with logging. Wired to domain events:
+
+- `incident.created` → notify tenant_admin/ciso/incident_manager + webhook payload with incident metadata.
+- `report.approved` / `report.submitted` → notify + webhook (submission reference included when present).
+- Deadline escalations already create in-app notifications via the escalation job (verified; late deadlines create records + remediation tasks idempotently).
+
+### In-app inbox
+
+New `/app/notifications` page (severity badges, mark-all-read, per-notification open-and-mark-read) + self-scoped `GET/PATCH /api/v1/notifications` (user can only ever see/modify their own rows). Added to the tenant navigation.
+
+### Tests
+
+`job-auth.test.ts` — fail-closed without secret, wrong secret rejected, both header conventions accepted. 134 unit tests green.
+
+---
+
+## Batch 14 — API, OpenAPI and integration contract
+
+### OpenAPI
+
+- Document extracted to `src/lib/api/openapi.ts` (route serves it unchanged) and extended with all endpoints added in batches 4–13: invitation lookup/accept (public + rate limits), member/invitation PATCH, legal entities, notifications, onboarding PUT, and the OpenAPI endpoint itself.
+- `info.description` now documents: auth model, tenant scoping (404-without-existence-leak semantics), the uniform error format, pagination behavior, rate limits, file upload/download, job-endpoint security (both header conventions) and outbound webhook signing (HMAC over `timestamp.body`, retry policy).
+
+### Contract tests
+
+`src/lib/api/openapi.test.ts` walks `src/app/api/v1/**/route.ts`, extracts implemented HTTP methods and asserts **bidirectional** consistency: every route documented with exactly its implemented methods, and no documented path without an implementation. Route/spec drift now fails CI. (+121 assertions; 255 tests total.)
+
+### Input validation
+
+New `requireTenantIdParam(req)` in the API handler: `tenantId` query params are now validated as UUIDs (400 on malformed input) across 22 list routes — previously raw strings reached the query layer. Body validation was already Zod-based on all JSON routes.
+
+---
+
+## Batch 15 — Billing, plans and entitlements
+
+### Entitlement engine
+
+- Pure resolver `src/lib/entitlements/resolve.ts` (unit-tested): tenant override (`tenant_feature_flags` with `ent:` prefix — the explicit, reasoned path for complimentary/internal access) → plan row (`entitlements`) → **fail closed** (missing row = disabled/limit 0).
+- Service `src/lib/services/entitlements.ts`: `getEntitlement`, `hasEntitlement`, `assertEntitlement` (403 `feature_not_in_plan` with Swedish message), `assertUserLimitNotReached` (counts active members + pending invitations against the plan's `users` limit), 30s cache invalidated on plan change.
+- Seed `0014_seed_entitlement_matrix.sql`: complete matrix for starter/business/enterprise covering all gated keys (evidence bank, GDPR track, exports, advanced reporting, procurement, supplier risk, leadership, webhooks, API, SSO/SCIM, break-glass, IP allowlist, Model B/C) — required because the engine fails closed.
+
+### Backend enforcement
+
+War room actions, break-glass start, GDPR track writes, evidence upload, exports, procurement package, webhook registration, invitation creation (user limit), and **deployment model B/C switching** (requires `single_tenant`/`customer_owned_data_plane` entitlement in addition to the provisioned-plane check).
+
+### UI enforcement
+
+War-room page renders an "Ingår inte i er plan" panel instead of the module; break-glass controls hidden on access review without entitlement; plan visible in settings; plan assignment via platform UI (Batch 11) is audited and invalidates the entitlement cache.
+
+### Tests
+
+`resolve.test.ts` — plan rows, disabled rows, fail-closed default, override grant/revoke, key isolation. 261 tests green.
+
+---
+
+## Batch 16 — CI/CD, migration tests and dependency security
+
+### CI (`.github/workflows/ci.yml`)
+
+- **build-and-test** job: `npm ci` → typecheck → lint → unit + contract tests → production build → `npm audit --audit-level=high` (blocks on high/critical).
+- **database-tests** job: Postgres 16 service container, runs `scripts/db-test.sh` (shim + all migrations + all seeds + the three SQL test suites: tenant isolation, support access, tenant integrity), then re-applies migrations 0019+ to verify idempotency (verified locally too: 0019–0023 re-apply cleanly). Migrations 0001–0018 are strictly ordered/apply-once (documented in the workflow).
+
+### Dependency security
+
+- Dependabot config: weekly grouped npm updates + GitHub Actions updates.
+- `docs/security/dependency-audit.md`: `npm audit` = **0 high/critical**; the 2 moderate advisories (`postcss` via next, `uuid` via exceljs) documented with severity, path, impact assessment ("not exploitable in this product") and decision (accept; forced fixes are breaking downgrades). Review process defined.
+
+---
+
+## Batch 17 — Observability, health checks and operational readiness
+
+### Endpoints
+
+- `/api/v1/health` — public liveness only: status, service, app version, time. No dependencies probed, nothing sensitive.
+- New `/api/v1/health/readiness` — requires **platform admin session or the job secret** (external monitoring): DB connectivity, storage bucket access, migration marker (probes a column from the newest migration series), job secret/email/webhook-signing configuration presence, rule package verification freshness (degraded > 180 days), and per-tenant Model B/C data-plane readiness (count of unready planes — all fail closed). Overall status ok/degraded/failed with 503 on failure; contract-tested and documented in OpenAPI.
+
+### Structured logging
+
+New `src/lib/server/log.ts` — single-line JSON logs (`ts`, `level`, `event`, fields; never secrets/PII). Wired into the API error handler (path+method on unhandled errors) and readiness warnings. `SENTRY_DSN` remains a documented reserved variable; no mock integration was added.
+
+### Existing observability confirmed
+
+Audit viewer (`/platform/audit`, `/api/v1/audit`), tenant health page (`/platform/health` from `tenant_health_checks`/`tenant_backup_status`), integration status page, and per-domain access/export/download logs.
+
+---
+
+## Batch 18 — Backup, restore, retention and data exit
+
+### Operational hooks
+
+- New `DELETE /api/v1/tenants/[id]`: platform owner only, requires typing the exact tenant name + a ≥10-char reason, **blocked with 409 while active legal holds exist**, soft-deletes (recoverable until manual purge per exit plan), audited as `tenant.deleted` with reason. Documented in OpenAPI + contract-tested.
+- Legal-hold deletion blocking at the DB level was delivered in Batch 10 (migration 0023 triggers) — referenced here as the enforcement backbone.
+- Tenant export verified: the supervisory package ZIP contains 20 structured JSON sections + an evidence manifest with SHA-256 hashes; support-access without `allow_export` is denied and logged.
+
+### Documentation
+
+New `docs/runbooks/data-lifecycle.md` ties the technical controls to operations: suspension, deliberate deletion flow, legal hold (API + trigger layers), retention (never deletes held evidence; audit-log retention separated), exit package contents and the **Model A/B/C responsibility matrix** (backup, retention runs, purge). Existing `backup-restore.md` (PITR, quarterly restore tests with hash verification) and `exit-plan/export-and-deletion.md` confirmed accurate; subprocessor list and DPA/PUB appendix already ship in the procurement package.
+
+---
+
+## Batch 19 — Accessibility, public sector quality and UX hardening
 
 ### Changes
 
-- Migration `0021_onboarding_contacts.sql`: structured onboarding facts on `tenant_settings` — incident contact, reporting contact, management owner, DPO contact, SSO requirement preference, data-residency requirement, deployment model preference.
-- New `PUT /api/v1/onboarding` saves the contact/requirement facts (tenant admin/CISO only, audited).
-- New `GET/POST /api/v1/legal-entities` (tenant-scoped, audited) so the previously hollow legal-entities step can capture real data.
-- **Onboarding wizard filled in**:
-  - Legal entities step: lists existing entities + inline quick-add form (name/orgnr).
-  - Incident roles step: live checklist of the six incident roles against actual `role_assignments` (green/missing indicators), plus a full contact form (incident/reporting/management/DPO) and requirement preferences (data residency, deployment model with "kräver provisionering" labels, SSO). Saving contacts is required to complete the step.
-  - Systems/vendors steps: live counts from the register with warnings when empty.
-  - Completion step: NIS2-readiness score and register counts before finishing.
-- Onboarding page now loads via the data-plane abstraction and passes readiness (`computeReadiness`) into the wizard; dashboard already reflects `tenants.onboarding_status`, which the POST endpoint recomputes on every step change.
+- **Skip links** ("Hoppa till innehåll"/"Skip to content") added to both tenant and platform layouts, targeting the main content region.
+- **Print/export-friendly pages**: `@media print` rules hide navigation chrome and normalize colors so report pages print cleanly.
+- **Destructive-action confirmations** completed: break-glass session end now confirms (member deactivation, invitation revocation, tenant suspend/delete already confirm from earlier batches; tenant deletion requires typing the exact name).
+
+### Verified existing state (audit)
+
+- Buttons/inputs have consistent `focus-visible` rings (shadcn base); sidebar uses `nav aria-label` + `aria-current="page"`; onboarding wizard steps use `aria-current="step"`, `role`d alerts/status messages exist on all new client forms (`role="alert"`/`role="status"`).
+- Status is never conveyed by color alone — every `StatusBadge` carries a Swedish text label (Batch 12).
+- All form fields introduced in batches 4–15 have explicit `<Label htmlFor>`, help texts and Swedish validation messages; Swedish date/time formatting (`sv-SE`) is used consistently.
+- `<html lang="sv">`; loading states expose `aria-busy` + `sr-only` text (Batch 12).
 
 ---
 
-## Batch 7 — Rule engine and legal source management
+## Batch 20 — Documentation, runbooks and customer-facing trust material
 
-### Source verification (data-driven, versioned)
-
-- Migration `0020_rule_verification.sql`: `last_verified_at`, `verified_by`, `source_note` on `regulatory_rule_sets` + `regulatory_rules`; `last_verified_at`/`verified_by` on `legal_sources`.
-- Seed `0013_seed_source_verification.sql`: official source URLs and verification stamps, **verified against official sources on 2026-07-09**: Cybersäkerhetslag (2025:1506) and Cybersäkerhetsförordning (2025:1507) via riksdagen.se (in force 2026-01-15, ordinance amended t.o.m. SFS 2026:623); MCFFS 2026:8 via mcf.se (in force 2026-07-01, reporting via cyberportalen to NCSC/CERT-SE). **Correction found during verification**: the MCFFS series is issued by Myndigheten för civilt försvar (MCF), not MSB — publisher fixed in seed. EU 2024/2690, GDPR and eIDAS linked to EUR-Lex. MCFFS 2026:11/2026:12 remain `pending` until guidance exists; PTS track remains draft/partial with mandatory manual review.
-
-### De-hardcoded frontend legal copy
-
-- GDPR track page: the "72 timmar" description now comes from the `regulatory_tracks` registry (GDPR_IMY row) with a cautious fallback that points to the rule profile instead of asserting a deadline.
-- Controls page: the "MCFFS 2026:11 träder i kraft 1 oktober 2026" line is now rendered from `regulatory_rule_sets.effective_from`/`status` — it disappears automatically when the rule set becomes active.
-- Both pages also moved their tenant queries onto the data-plane client.
-- Decision documented: `deriveRulePackages` remains TS orchestration, but all package **content** (status, coverage, version, effectivity) is read from the DB when packages are assigned and displayed; the mapping itself is code-reviewed logic covered by unit tests. Engines already return `manual_review_required`/confidence and matched rules with legal references.
-
-### Disclaimer coverage
-
-`DecisionSupportDisclaimer` added to late-reporting, war-room, recipients, incidents list, reports list and management pages; a short disclaimer line added to the login card. All assessment-adjacent screens now carry it.
+- `docs/deployment-models.md` rewritten to match the implemented fail-closed behavior (data-plane module, actor-context gating, 409 on unprovisioned switch, scheduler split).
+- `docs/testing.md` updated: npm commands, CI description, all new unit/contract test suites.
+- `docs/security/support-access.md` updated: scope enforcement (include_evidence/read_write/allow_export) now implemented and logged, incl. denied attempts; request/approve UI flows referenced.
+- New `docs/go-live-checklist.md` (build gates, env, DB, functional smoke test, security, operations).
+- New customer trust material: `docs/security/security-overview.md` (Swedish, procurement-ready summary of isolation layers, auth, support access, evidence handling, rule versioning, operations — no false claims; everything references implemented behavior). Subprocessor list and DPA/PUB appendix already existed and ship in the procurement package.
+- README documentation index updated.
 
 ---
 
-## Batch 6 — Model A/B/C data-plane architecture (P0)
+## Batch 21 — End-to-end production readiness tests
 
-### Abstraction
+New `supabase/tests/test_journeys.sql` (runs in `db:test` and CI) exercising the journeys at the database layer — service-role writes in the same order the service layer performs them, with RLS-verified reads as the actual users:
 
-New `src/lib/server/data-plane.ts`:
+1. **Platform admin journey**: create tenant + settings, assign plan, hashed-token invitation, acceptance (membership + role + invitation status) — accepted admin sees the tenant via RLS, not the other tenant.
+2. **Operational journey**: vendor → system (vendor-linked) → critical service → tenant-scoped service/system link → risk (system-linked) → control → evidence (control-linked). Member sees everything; outsider sees nothing.
+3. **Incident journey**: incident → system impact → significance assessment (`significant_reportable`) → 72h deadline → approved report → submission **with stage-specific reference** → deadline met → complete 3-event audit trail. Cross-tenant report creation rejected by composite FK; outsider can neither read the incident nor forge comments (RLS write block).
+4. **Security journey**: covered across `test_tenant_isolation.sql` (cross-tenant reads/writes), `test_support_access.sql` (no access before approval, access while approved, cut-off after expiry) and the new outsider assertions.
 
-- `resolveTenantDeploymentModel(tenantId)`, `getTenantControlPlaneClient()`, `getTenantDataPlaneClient(tenantId)`, `assertDataPlaneReady(tenantId)`, `filterTenantsWithUnreadyDataPlane(ids)`, `invalidateDataPlaneCache()`.
-- Model A → central tenant-aware admin client. Model B/C → isolated Supabase client from `tenant_data_plane_connections` (active + `supabase_url` + secret resolvable from env ref). Anything less throws `DataPlaneNotReadyError` — **there is no fallback to the central database**.
-- 30s TTL cache with explicit invalidation on deployment-model change.
-
-### Fail-closed enforcement at the identity layer
-
-`getActorContext` now **drops memberships and support access for any Model B/C tenant whose data plane is not ready** — every `isTenantMember`/`hasPermission` check across all routes and pages denies access until provisioning completes. This makes fail-closed behavior global rather than per-refactored-callsite.
-
-### Service and route refactor
-
-- Services now split control-plane (tenants registry, tenant_settings, rule packages, role assignments, notifications, reference data) from tenant-plane (incidents, reports, evidence incl. storage, scope/size assessments, deadlines, controls, readiness inputs) access: `incidents`, `reports`, `evidence`, `significance`, `deadlines`, `scope`, `readiness` all obtain the tenant client via `getTenantDataPlaneClient`.
-- Tenant-guard entity checks (`assertTenantEntity` etc.) run against the claimed tenant's data plane.
-- 20 tenant-data API route files refactored from `getAdminClient()` to the data-plane client. Anomaly telemetry, audit logs, support access, tenant registry and jobs intentionally stay control-plane (documented in module docstring). Escalation/anomaly jobs process the central (Model A) plane; B/C planes run their own scheduler per the deployment docs.
-- `PATCH /tenants/[id]`: switching a tenant to Model B/C now returns **409 `data_plane_not_ready`** unless a fully provisioned active connection with resolvable secret exists — the platform cannot silently lock out a tenant or leave B/C "selected" while data flows centrally.
-
-### Tests
-
-`data-plane.test.ts` — 8 tests: Model A passthrough; B/C with no connection / inactive connection / missing secret all throw `DataPlaneNotReadyError`; **no central fallback ever occurs for B/C**; fully provisioned B returns the isolated client; unknown tenants are treated as unready (fail closed). 118 unit tests green.
+The TypeScript halves of the journeys (guards, transitions, entitlements, auth policy, data-plane fail-closed, engines) are covered by the 263-test Vitest suite. All four SQL suites PASS.
 
 ---
 
