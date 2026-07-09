@@ -3,12 +3,17 @@
 ## Commands
 
 ```bash
-pnpm typecheck      # strict TypeScript
-pnpm lint           # ESLint (next/core-web-vitals + TS)
-pnpm test           # Vitest unit/integration tests
-./scripts/db-test.sh  # migrations + seeds + SQL RLS tests on local Postgres
-pnpm build          # production build
+npm run typecheck   # strict TypeScript
+npm run lint        # ESLint (next/core-web-vitals + TS)
+npm run test        # Vitest unit + contract tests
+npm run db:test     # migrations + seeds + SQL RLS/integrity tests on local Postgres
+npm run build       # production build
 ```
+
+CI (`.github/workflows/ci.yml`) runs all of the above plus
+`npm audit --audit-level=high` and a Postgres 16 job that applies all
+migrations/seeds, runs the SQL suites and re-applies migrations 0019+ to
+verify idempotency.
 
 ## Unit tests (Vitest, `src/**/*.test.ts`)
 
@@ -30,6 +35,18 @@ pnpm build          # production build
   definitions.
 - ABAC: fail-closed default, deny-overrides-allow, restricted evidence,
   support-session export denial, disabled policies, break-glass read.
+- Tenant guards: 403/404 semantics, entity/tenant mismatch, permission checks.
+- Data plane: Model A passthrough, Model B/C fail-closed (no connection,
+  inactive connection, missing secret), no central fallback.
+- Auth policy: SSO-required blocking, tenant-admin exemption, MFA AAL gating.
+- Entitlements: plan rows, fail-closed defaults, tenant overrides.
+- Report transitions: approval-before-submission, submission reference or
+  documented override.
+- Evidence file policy: allowlist/blocklist, plan-based size limits.
+- Job auth: fail-closed without secret, both header conventions.
+- Rate limiter and open-redirect protection (`safeNextPath`).
+- OpenAPI contract: every route documented with exactly its implemented
+  methods; no phantom paths.
 
 ## Database tests (`supabase/tests/`)
 

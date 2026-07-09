@@ -19,8 +19,15 @@ godkännande.
   godkänd, ej utgången förfrågan finns.
 - Plattformsadministratörer har **inte** blanket-åtkomst till tenantdata —
   endast styrplansmetadata.
-- Export under supportsession kräver separat `allow_export`-flagga (ABAC-policy
-  nekar annars).
+- Tjänstelagret (`src/lib/authz/support-guards.ts`) verkställer omfattningen
+  för supportsessioner: `include_evidence` krävs för bevisnedladdning/-uppladdning,
+  `scope=read_write` för skrivande bevisåtgärder och `allow_export` för
+  samtliga exporter (styrelserapport, tillsynspaket, Excel, upphandlingspaket,
+  rapportexport). Både tillåtna och **nekade** försök loggas i
+  `support_access_logs`.
+- Supportåtkomst begärs från plattformens tenantprofil
+  (`/platform/tenants/{id}`) och godkänns/nekas/återkallas av kundens
+  tenantadmin/CISO i `/app/access-review`.
 
 ## Synlighet
 

@@ -98,7 +98,13 @@ only `NEXT_PUBLIC_*` variables reach the browser.
 See [docs/](docs/) — architecture, rule engine, data model, RLS/security, tenant resolver,
 deployment models (multi-tenant, single-tenant, customer-owned data plane), onboarding,
 incident and reporting flows, Cyberportalen copy mode, procurement/GDPR/exit packages,
-accessibility, and runbooks.
+accessibility, and runbooks. Highlights:
+
+- [docs/go-live-checklist.md](docs/go-live-checklist.md) — production readiness gate.
+- [docs/security/security-overview.md](docs/security/security-overview.md) — customer-facing security summary.
+- [docs/security/dependency-audit.md](docs/security/dependency-audit.md) — audit findings and decisions.
+- [docs/runbooks/data-lifecycle.md](docs/runbooks/data-lifecycle.md) — retention, deletion, legal hold, exit.
+- [docs/production-readiness/batch-reports.md](docs/production-readiness/batch-reports.md) — batch-by-batch hardening log.
 
 Key principles:
 
