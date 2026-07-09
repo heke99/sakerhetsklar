@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
+import { assertIncidentTenant } from "@/lib/authz/tenant-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 const commentSchema = z.object({
@@ -14,6 +15,7 @@ export const POST = withApi<{ id: string }>(async (req, { actor, params }) => {
   if (!hasPermission(actor, input.tenantId, "incidents.write")) {
     throw forbidden("incidents.write permission required");
   }
+  await assertIncidentTenant(actor, params.id, input.tenantId);
 
   const admin = getAdminClient();
   const { data, error } = await admin

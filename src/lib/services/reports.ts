@@ -3,6 +3,7 @@ import "server-only";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
+import { assertTenantEntity } from "@/lib/authz/tenant-guards";
 
 export type ReportStage =
   | "early_warning_24h"
@@ -183,6 +184,10 @@ export async function updateReportFields(
   input: { tenantId: string; reportId: string; fields: Record<string, string> },
 ) {
   const admin = getAdminClient();
+
+  // The report must belong to the tenant before any field rows are written.
+  await assertTenantEntity("incident_reports", input.reportId, input.tenantId);
+
   for (const [key, value] of Object.entries(input.fields)) {
     await admin
       .from("incident_report_fields")

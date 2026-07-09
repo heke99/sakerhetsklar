@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-import { withApi, ok, parseBody, forbidden } from "@/lib/api/handler";
+import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
+import { assertIncidentTenant } from "@/lib/authz/tenant-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -19,6 +20,7 @@ export const POST = withApi<{ id: string }>(async (req, { actor, params }) => {
   if (!hasPermission(actor, input.tenantId, "incidents.write")) {
     throw forbidden("incidents.write permission required");
   }
+  await assertIncidentTenant(actor, params.id, input.tenantId);
 
   const admin = getAdminClient();
   const { data, error } = await admin
@@ -55,19 +57,25 @@ const patchSchema = z.object({
   status: z.enum(["open", "in_progress", "done", "cancelled"]),
 });
 
-export const PATCH = withApi<{ id: string }>(async (req, { actor }) => {
+export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
   const input = await parseBody(req, patchSchema);
   if (!hasPermission(actor, input.tenantId, "incidents.write")) {
     throw forbidden();
   }
+  await assertIncidentTenant(actor, params.id, input.tenantId);
+
   const admin = getAdminClient();
+  // Scope the update to the incident in the URL as well as the tenant so a
+  // task id from another incident cannot be manipulated through this route.
   const { data, error } = await admin
     .from("incident_tasks")
     .update({ status: input.status })
     .eq("id", input.taskId)
     .eq("tenant_id", input.tenantId)
+    .eq("incident_id", params.id)
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) throw notFound("Resource not found");
   return ok(data);
 });

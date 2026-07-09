@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
+import { assertTenantEntity } from "@/lib/authz/tenant-guards";
 import { saveSizeAssessment } from "@/lib/services/scope";
 
 const sizeSchema = z.object({
@@ -21,6 +22,9 @@ export const POST = withApi(async (req, { actor }) => {
   const input = await parseBody(req, sizeSchema);
   if (!hasPermission(actor, input.tenantId, "scope.write")) {
     throw forbidden("scope.write permission required");
+  }
+  if (input.legalEntityId) {
+    await assertTenantEntity("legal_entities", input.legalEntityId, input.tenantId);
   }
   const { assessment, result } = await saveSizeAssessment(actor, input.tenantId, input);
   return ok({ assessment, result }, { status: 201 });

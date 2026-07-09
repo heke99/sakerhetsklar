@@ -110,11 +110,11 @@ values
   ('d3000000-0000-0000-0000-000000000021', 'd0000000-0000-0000-0000-000000000003', 'Managed hosting för kommunkunder', 'ict_b2b', true, 'Leveranschef', 30000, 1, false, null)
 on conflict (id) do nothing;
 
-insert into public.critical_service_systems (critical_service_id, system_id)
+insert into public.critical_service_systems (tenant_id, critical_service_id, system_id)
 values
-  ('d3000000-0000-0000-0000-000000000001', 'd2000000-0000-0000-0000-000000000001'),
-  ('d3000000-0000-0000-0000-000000000011', 'd2000000-0000-0000-0000-000000000011'),
-  ('d3000000-0000-0000-0000-000000000021', 'd2000000-0000-0000-0000-000000000021')
+  ('d0000000-0000-0000-0000-000000000001', 'd3000000-0000-0000-0000-000000000001', 'd2000000-0000-0000-0000-000000000001'),
+  ('d0000000-0000-0000-0000-000000000002', 'd3000000-0000-0000-0000-000000000011', 'd2000000-0000-0000-0000-000000000011'),
+  ('d0000000-0000-0000-0000-000000000003', 'd3000000-0000-0000-0000-000000000021', 'd2000000-0000-0000-0000-000000000021')
 on conflict do nothing;
 
 insert into public.vendors (id, tenant_id, name, organization_number, incident_contact_name, incident_contact_email, has_24_7_contact, personal_data_processor, dpa_exists, risk_rating)

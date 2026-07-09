@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission } from "@/lib/authz/context";
+import {
+  assertIncidentTenant,
+  assertTenantEntity,
+} from "@/lib/authz/tenant-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -26,6 +30,9 @@ export const POST = withApi(async (req, { actor }) => {
   const input = await parseBody(req, startSchema);
   if (!hasPermission(actor, input.tenantId, "lathunds.run")) {
     throw forbidden("lathunds.run permission required");
+  }
+  if (input.incidentId) {
+    await assertIncidentTenant(actor, input.incidentId, input.tenantId);
   }
 
   const admin = getAdminClient();
@@ -73,6 +80,7 @@ export const PATCH = withApi(async (req, { actor }) => {
   if (!hasPermission(actor, input.tenantId, "lathunds.run")) {
     throw forbidden();
   }
+  await assertTenantEntity("lathund_runs", input.runId, input.tenantId);
 
   const admin = getAdminClient();
   const { data, error } = await admin

@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, hasTenantRole, isTenantMember } from "@/lib/authz/context";
+import {
+  assertIncidentTenant,
+  assertTenantEntity,
+} from "@/lib/authz/tenant-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -35,6 +39,9 @@ export const POST = withApi(async (req, { actor }) => {
   const input = await parseBody(req, requirementSchema);
   if (!hasTenantRole(actor, input.tenantId, ["tenant_admin", "ciso", "vendor_manager", "legal_compliance"])) {
     throw forbidden();
+  }
+  if (input.vendorId) {
+    await assertTenantEntity("vendors", input.vendorId, input.tenantId);
   }
   const admin = getAdminClient();
   const { data, error } = await admin
@@ -77,6 +84,14 @@ export const PATCH = withApi(async (req, { actor }) => {
   const input = await parseBody(req, notifySchema);
   if (!hasPermission(actor, input.tenantId, "incidents.write")) {
     throw forbidden();
+  }
+  await assertIncidentTenant(actor, input.incidentId, input.tenantId);
+  if (input.requirementId) {
+    await assertTenantEntity(
+      "customer_contract_reporting_requirements",
+      input.requirementId,
+      input.tenantId,
+    );
   }
   const admin = getAdminClient();
   const { data, error } = await admin

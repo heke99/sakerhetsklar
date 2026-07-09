@@ -3,6 +3,7 @@ import "server-only";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
+import { assertAllTenantEntities } from "@/lib/authz/tenant-guards";
 
 export interface CreateIncidentInput {
   tenantId: string;
@@ -25,6 +26,17 @@ export interface CreateIncidentInput {
 
 export async function createIncident(actor: ActorContext, input: CreateIncidentInput) {
   const admin = getAdminClient();
+
+  // Linked resources must belong to the same tenant — never trust raw IDs.
+  await Promise.all([
+    assertAllTenantEntities("systems", input.systemIds ?? [], input.tenantId),
+    assertAllTenantEntities(
+      "critical_services",
+      input.criticalServiceIds ?? [],
+      input.tenantId,
+    ),
+    assertAllTenantEntities("vendors", input.vendorIds ?? [], input.tenantId),
+  ]);
 
   const { count } = await admin
     .from("incidents")

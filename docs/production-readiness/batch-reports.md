@@ -93,3 +93,43 @@ P2:
 `typecheck`, `lint`, `build` green.
 
 ---
+## Batch 3 — Tenant isolation and database integrity (P0)
+
+### Service/API layer
+
+New reusable guards in `src/lib/authz/tenant-guards.ts`:
+`assertTenantAccess`, `assertTenantEntity`, `assertAllTenantEntities`, `resolveTenantFromEntity`, `assertIncidentTenant`, `assertReportTenant`, `assertEvidenceTenant`. Cross-tenant/missing resources consistently return **404** so probing cannot distinguish "exists in another tenant" from "does not exist".
+
+Applied to every route the audit flagged:
+
+- `POST/PATCH /incidents/[id]/comments|tasks|recipients|war-room` — incident ownership verified against body `tenantId`; task updates additionally scoped to the URL incident.
+- `POST /incidents` — `systemIds`, `criticalServiceIds`, `vendorIds` verified via `assertAllTenantEntities` in `createIncident`.
+- `POST /evidence` — `incidentId`/`controlId` verified in `uploadEvidence`; the `controls` update is tenant-scoped.
+- `updateReportFields` — report ownership verified before field upserts.
+- `POST /gdpr`, `POST /eidas` — incident verified; existing-row lookups now tenant-filtered.
+- `PATCH /insurance`, `PATCH /contracts` — incident + optional `policyId`/`requirementId` verified; `POST /contracts` verifies `vendorId`.
+- `POST /systems` (`vendorId`), `POST /risks` (`linkedSystemId`, `linkedVendorId`), `POST /critical-services` (`systemIds`).
+- `POST/PATCH /lathunds` — `incidentId` and `runId` verified.
+- `POST /scope/size` — `legalEntityId` verified.
+- **`PATCH /security/break-glass`** — previously had **no authorization**; now only the session owner, tenant admin/CISO of the session's tenant, or platform security may end a session (404 on foreign IDs).
+
+### Database layer (`supabase/migrations/0019_tenant_integrity.sql`)
+
+- `unique (tenant_id, id)` added to 23 tenant-owned parent tables.
+- **100 composite FKs** `(tenant_id, <parent>_id) → parent(tenant_id, id)` generated from the live schema, covering every child of incidents, incident_reports, evidence, systems, vendors, controls, critical_services, legal_entities, lathund_runs, war rooms, legal holds, risks and more. Nullable references use `on delete set null (col)` (PG 15+) so `tenant_id` is never nulled.
+- `tenant_id` added (with backfill + not null + FKs + direct tenant RLS policies + index) to the four join tables that lacked it: `critical_service_systems`, `system_segment_memberships`, `protected_information_systems`, `legal_hold_items`.
+- Missing FK added: `recipients.recipient_group_id → recipient_groups (tenant_id, id)`.
+- Migration is idempotent (constraints added only when absent).
+- App/seed inserts updated to include `tenant_id` on `critical_service_systems`.
+
+### Tests
+
+- `supabase/tests/test_tenant_integrity.sql` — proves cross-tenant comment/task/report-field/evidence-link/service-system-link/vendor-impact/deadline inserts **violate FKs even for the service role**, and same-tenant inserts still work. PASS.
+- `src/lib/authz/tenant-guards.test.ts` — 14 unit tests for all guards (403 vs 404 semantics, mismatch handling, permission checks). Vitest now aliases `server-only` to a stub so server modules are unit-testable.
+
+### Verification
+
+`npm run test` 94/94 green, `db:test` (migrations + seeds + 3 SQL suites on local PG16) green, `typecheck`, `lint`, `build` green.
+
+---
+

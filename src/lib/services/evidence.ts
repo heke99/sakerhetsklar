@@ -6,6 +6,7 @@ import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { hasPermission } from "@/lib/authz/context";
+import { assertTenantEntity } from "@/lib/authz/tenant-guards";
 
 const RESTRICTED_CLASSIFICATIONS = [
   "strictly_confidential",
@@ -28,6 +29,14 @@ export async function uploadEvidence(
   },
 ) {
   const admin = getAdminClient();
+
+  // Linked entities must belong to the same tenant as the evidence.
+  if (input.incidentId) {
+    await assertTenantEntity("incidents", input.incidentId, input.tenantId);
+  }
+  if (input.controlId) {
+    await assertTenantEntity("controls", input.controlId, input.tenantId);
+  }
 
   const bytes = Buffer.from(await input.file.arrayBuffer());
   const hash = createHash("sha256").update(bytes).digest("hex");
@@ -107,7 +116,8 @@ export async function uploadEvidence(
     await admin
       .from("controls")
       .update({ evidence_uploaded: true })
-      .eq("id", input.controlId);
+      .eq("id", input.controlId)
+      .eq("tenant_id", input.tenantId);
   }
 
   await writeAuditLog({

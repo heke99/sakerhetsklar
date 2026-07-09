@@ -1,8 +1,10 @@
 import "server-only";
 
+import { ApiError } from "@/lib/api/handler";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
+import { hasPlatformRole, hasTenantRole } from "@/lib/authz/context";
 
 /** Break-glass (spec §6): reason, time limit, logging, admin notification. */
 export async function startBreakGlass(
@@ -69,6 +71,31 @@ export async function endBreakGlass(
   input: { sessionId: string },
 ) {
   const admin = getAdminClient();
+
+  // Resolve the session first: only the session owner, a tenant admin/CISO of
+  // the session's tenant, or platform security may end it.
+  const { data: existing, error: loadError } = await admin
+    .from("break_glass_sessions")
+    .select("id, tenant_id, user_id, status")
+    .eq("id", input.sessionId)
+    .maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!existing) throw new ApiError(404, "Resource not found", "not_found");
+
+  const isOwner = existing.user_id === actor.userId;
+  const isTenantSecurity = hasTenantRole(actor, existing.tenant_id, [
+    "tenant_admin",
+    "ciso",
+  ]);
+  const isPlatformSecurity = hasPlatformRole(actor, [
+    "platform_owner",
+    "security_admin",
+  ]);
+  if (!isOwner && !isTenantSecurity && !isPlatformSecurity) {
+    // 404 so a foreign session id cannot be probed for existence.
+    throw new ApiError(404, "Resource not found", "not_found");
+  }
+
   const { data: session, error } = await admin
     .from("break_glass_sessions")
     .update({ status: "ended", ended_at: new Date().toISOString(), ended_by: actor.userId })

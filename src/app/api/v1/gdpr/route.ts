@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
+import { assertIncidentTenant } from "@/lib/authz/tenant-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -53,12 +54,14 @@ export const POST = withApi(async (req, { actor }) => {
   if (!hasPermission(actor, input.tenantId, "gdpr.write")) {
     throw forbidden("gdpr.write permission required");
   }
+  await assertIncidentTenant(actor, input.incidentId, input.tenantId);
 
   const admin = getAdminClient();
   const { data: existing } = await admin
     .from("incident_personal_data_assessments")
     .select("*")
     .eq("incident_id", input.incidentId)
+    .eq("tenant_id", input.tenantId)
     .maybeSingle();
 
   const update: Record<string, unknown> = {

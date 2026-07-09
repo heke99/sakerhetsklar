@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { withApi, ok, parseBody, forbidden, notFound } from "@/lib/api/handler";
 import { hasPermission, isTenantMember } from "@/lib/authz/context";
+import { assertTenantEntity } from "@/lib/authz/tenant-guards";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 import { writeAuditLog } from "@/lib/audit/log";
 
@@ -53,6 +54,9 @@ export const POST = withApi(async (req, { actor }) => {
   const input = await parseBody(req, systemSchema);
   if (!hasPermission(actor, input.tenantId, "systems.write")) {
     throw forbidden("systems.write permission required");
+  }
+  if (input.vendorId) {
+    await assertTenantEntity("vendors", input.vendorId, input.tenantId);
   }
 
   const admin = getAdminClient();
