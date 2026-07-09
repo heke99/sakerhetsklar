@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
+import { RISK_STATUS_SV, svLabel } from "@/lib/labels/sv";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { RiskForm } from "./risk-form";
@@ -82,7 +83,7 @@ export default async function RisksPage() {
                       "–"
                     )}
                   </TableCell>
-                  <TableCell>{r.status}</TableCell>
+                  <TableCell>{svLabel(RISK_STATUS_SV, r.status)}</TableCell>
                   <TableCell>{r.owner_name ?? "–"}</TableCell>
                 </TableRow>
               ))

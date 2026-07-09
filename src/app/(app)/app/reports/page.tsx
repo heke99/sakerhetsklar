@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
+import { REPORT_STATUS_SV, svLabel } from "@/lib/labels/sv";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +100,7 @@ export default async function ReportsPage() {
                     <TableCell className="font-mono text-xs">{r.track_code}</TableCell>
                     <TableCell>
                       <StatusBadge color={statusColors[r.status] ?? "gray"}>
-                        {r.status}
+                        {svLabel(REPORT_STATUS_SV, r.status)}
                       </StatusBadge>
                     </TableCell>
                     <TableCell>

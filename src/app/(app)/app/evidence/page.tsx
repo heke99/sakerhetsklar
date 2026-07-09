@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { hasPermission } from "@/lib/authz/context";
+import { CLASSIFICATION_SV, svLabel } from "@/lib/labels/sv";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
 import {
   getTenantControlPlaneClient,
@@ -106,7 +107,7 @@ export default async function EvidencePage() {
                   <TableCell>{e.evidence_type}</TableCell>
                   <TableCell>
                     <StatusBadge color={classificationColors[e.classification] ?? "gray"}>
-                      {e.classification}
+                      {svLabel(CLASSIFICATION_SV, e.classification)}
                     </StatusBadge>
                   </TableCell>
                   <TableCell>

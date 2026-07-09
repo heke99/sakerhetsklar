@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { REPORT_STATUS_SV, svLabel } from "@/lib/labels/sv";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -116,7 +117,7 @@ export function ReportEditor({
                   : "green"
           }
         >
-          {status}
+          {svLabel(REPORT_STATUS_SV, status)}
         </StatusBadge>
         {dueAt ? (
           <StatusBadge color="yellow">

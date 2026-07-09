@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
+import { EXERCISE_STATUS_SV, svLabel } from "@/lib/labels/sv";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { ExerciseControls } from "./exercise-controls";
@@ -88,7 +89,7 @@ export default async function ExercisesPage() {
                               : "gray"
                         }
                       >
-                        {r.status}
+                        {svLabel(EXERCISE_STATUS_SV, r.status)}
                       </StatusBadge>
                     </TableCell>
                     <TableCell>

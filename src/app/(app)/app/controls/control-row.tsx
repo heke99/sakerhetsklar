@@ -56,14 +56,16 @@ export function ControlRow({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState(control.status);
   const [assignee, setAssignee] = useState(control.assigned_user_name ?? "");
   const [deadline, setDeadline] = useState(control.deadline ?? "");
 
   async function save() {
     setBusy(true);
+    setError(null);
     try {
-      await fetch("/api/v1/controls", {
+      const res = await fetch("/api/v1/controls", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -74,6 +76,13 @@ export function ControlRow({
           deadline: deadline || null,
         }),
       });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        setError(body.error?.message ?? "Kunde inte spara kontrollen. Försök igen.");
+        return;
+      }
       setOpen(false);
       router.refresh();
     } finally {
@@ -166,6 +175,11 @@ export function ControlRow({
             <Button onClick={save} disabled={busy} size="sm">
               {busy ? "Sparar…" : "Spara"}
             </Button>
+            {error ? (
+              <p role="alert" className="mt-2 text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}

@@ -97,10 +97,10 @@ export default function HomePage() {
             Logga in
           </Link>
           <Link
-            href="/app/overview"
+            href="/login"
             className="hidden rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 sm:inline-flex"
           >
-            Se demoöversikt
+            Till plattformen
           </Link>
         </div>
       </header>
@@ -130,10 +130,10 @@ export default function HomePage() {
               Logga in
             </Link>
             <Link
-              href="/app/overview"
+              href="#plattform"
               className="inline-flex items-center justify-center rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/35 hover:bg-white/10"
             >
-              Öppna demoöversikt
+              Se funktioner
             </Link>
           </div>
 
@@ -159,7 +159,7 @@ export default function HomePage() {
             <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-5">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <div>
-                  <p className="text-sm text-slate-400">Översikt</p>
+                  <p className="text-sm text-slate-400">Exempelvy (illustration)</p>
                   <h2 className="mt-1 text-xl font-semibold">Rapporteringsberedskap</h2>
                 </div>
                 <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200">
@@ -305,7 +305,7 @@ export default function HomePage() {
       <section className="mx-auto max-w-4xl px-6 py-20 text-center lg:px-8">
         <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Kom igång med Säkerhetsklar.</h2>
         <p className="mt-4 text-base leading-7 text-slate-300">
-          Logga in för att fortsätta till kundvy, superadmin eller incidentarbete. Demoöversikten finns kvar för intern verifiering.
+          Logga in för att fortsätta till er organisations kontrollcenter, eller kontakta oss för en genomgång av plattformen.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Link
@@ -313,12 +313,6 @@ export default function HomePage() {
             className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
           >
             Logga in
-          </Link>
-          <Link
-            href="/app/overview"
-            className="inline-flex items-center justify-center rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/35 hover:bg-white/10"
-          >
-            Gå till kundvy
           </Link>
           <Link
             href="/platform"

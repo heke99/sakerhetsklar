@@ -10,7 +10,7 @@ import { getAdminClient } from "@/lib/server/supabase-admin";
 import { WarRoomPanel } from "./war-room-panel";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "War room" };
+export const metadata = { title: "Krisrum" };
 
 export default async function WarRoomPage({
   params,
@@ -59,7 +59,7 @@ export default async function WarRoomPage({
   return (
     <main className="p-8">
       <PageHeader
-        title={`War room — ${incident.reference}`}
+        title={`Krisrum — ${incident.reference}`}
         description={`${incident.title}. Samlad ledning av allvarlig incident: beslut, uppgifter, deadlines, rapporter och bevis.`}
         actions={
           <div className="flex gap-2">

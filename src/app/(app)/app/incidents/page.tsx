@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
+import { INCIDENT_STATUS_SV, SEVERITY_SV, svLabel } from "@/lib/labels/sv";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { IncidentWizard } from "./incident-wizard";
@@ -124,7 +125,7 @@ export default async function IncidentsPage() {
                   </TableCell>
                   <TableCell className="max-w-sm truncate font-medium">{i.title}</TableCell>
                   <TableCell>
-                    <StatusBadge color={statusColors[i.status] ?? "gray"}>{i.status}</StatusBadge>
+                    <StatusBadge color={statusColors[i.status] ?? "gray"}>{svLabel(INCIDENT_STATUS_SV, i.status)}</StatusBadge>
                   </TableCell>
                   <TableCell>
                     <StatusBadge
@@ -136,7 +137,7 @@ export default async function IncidentsPage() {
                             : "green"
                       }
                     >
-                      {i.severity}
+                      {svLabel(SEVERITY_SV, i.severity)}
                     </StatusBadge>
                   </TableCell>
                   <TableCell>

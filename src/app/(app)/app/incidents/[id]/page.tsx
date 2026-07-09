@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge, type StatusColor } from "@/components/app/status-badge";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
+import { DEADLINE_STATUS_SV, SEVERITY_SV, SIGNIFICANCE_SV, TASK_STATUS_SV, svLabel } from "@/lib/labels/sv";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { IncidentActions } from "./incident-actions";
@@ -108,10 +109,10 @@ export default async function IncidentDetailPage({
                     : "green"
               }
             >
-              {incident.severity}
+              {svLabel(SEVERITY_SV, incident.severity)}
             </StatusBadge>
             <StatusBadge color={significanceColors[incident.significance_status] ?? "gray"}>
-              {incident.significance_status}
+              {svLabel(SIGNIFICANCE_SV, incident.significance_status)}
             </StatusBadge>
           </div>
         }
@@ -137,7 +138,7 @@ export default async function IncidentDetailPage({
           href={`/app/incidents/${incident.id}/war-room`}
           className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
         >
-          War room
+          Krisrum
         </Link>
         <Link
           href={`/app/incidents/${incident.id}/gdpr`}
@@ -167,7 +168,7 @@ export default async function IncidentDetailPage({
                   {d.deadline_type}
                 </StatusBadge>
                 <span>{new Date(d.due_at).toLocaleString("sv-SE")}</span>
-                <span className="text-muted-foreground">({d.status})</span>
+                <span className="text-muted-foreground">({svLabel(DEADLINE_STATUS_SV, d.status)})</span>
               </li>
             ))}
           </ul>
@@ -241,7 +242,7 @@ export default async function IncidentDetailPage({
                   <StatusBadge
                     color={t.status === "done" ? "green" : t.status === "in_progress" ? "blue" : "gray"}
                   >
-                    {t.status}
+                    {svLabel(TASK_STATUS_SV, t.status)}
                   </StatusBadge>
                 </li>
               ))
