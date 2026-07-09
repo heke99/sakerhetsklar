@@ -179,6 +179,25 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 9 — Incident and reporting workflow end-to-end
+
+### Workflow controls implemented
+
+- New pure validator `src/lib/reports/transitions.ts` (called from `setReportStatus`):
+  - Submission **requires prior approval** (was previously unenforced).
+  - Submission requires a **submission reference (Cyberportalen-ID)** or an explicit documented override reason; overrides are audited as `report.marked_submitted_without_reference`.
+  - The stage-id step continues to require id-or-override.
+- The legal deadline is marked `met` **only** as a consequence of a recorded submission (`incident_report_submissions` row) — never independently. Submission rows now carry the reference (`0022_submission_reference.sql`).
+- Report editor UI updated: step 3 now collects the Cyberportalen-ID (or a ≥10-char override reason) at submission time; buttons stay disabled otherwise.
+- Late reporting already requires structured reasons + `incidents.approve` permission for approval (verified); escalation job creates late-reporting records + remediation tasks idempotently (verified).
+- Deadline tracks verified through existing engine tests: 24h/72h/final-report/situation-report, state-agency 6h, GDPR/IMY 72h, eIDAS/PTS, manual-review paths.
+
+### Tests
+
+`transitions.test.ts` — 7 tests: approval-before-submission, reference-or-override on submission and stage close, override flagging, receipt step. Combined with existing engine tests this covers: significant NIS2 incident, non-significant, GDPR path, missing facts → manual review, late reporting steps, submission-reference gating. Cross-tenant reporting blocked is covered by Batch 3 guards/FK tests. 125 unit tests green.
+
+---
+
 ## Batch 8 — Scope assessment, onboarding and customer readiness
 
 ### Changes

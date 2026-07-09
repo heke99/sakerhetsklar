@@ -7,6 +7,7 @@ import {
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { assertTenantEntity } from "@/lib/authz/tenant-guards";
+import { validateReportTransition } from "@/lib/reports/transitions";
 
 export type ReportStage =
   | "early_warning_24h"
@@ -245,6 +246,20 @@ export async function setReportStatus(
     .maybeSingle();
   if (!report) throw new Error("Report not found");
 
+  // Workflow controls: approval before submission; submission reference or
+  // documented override required. Pure logic in lib/reports/transitions.ts.
+  const validation = validateReportTransition(
+    { status: report.status, approvedAt: report.approved_at ?? null },
+    {
+      status: input.status,
+      cyberportalId: input.cyberportalId,
+      overrideReason: input.overrideReason,
+    },
+  );
+  if (!validation.ok) {
+    throw new Error(validation.reasonSv);
+  }
+
   const update: Record<string, unknown> = {
     status: input.status,
     updated_by: actor.userId,
@@ -265,9 +280,36 @@ export async function setReportStatus(
       report_id: input.reportId,
       submitted_by: actor.userId,
       method: input.submissionMethod ?? "cyberportalen",
+      reference: input.cyberportalId ?? null,
     });
 
-    // Mark the corresponding legal deadline as met.
+    if (input.cyberportalId) {
+      // Stage-specific submission reference.
+      await admin.from("cyberportal_incident_ids").upsert(
+        {
+          tenant_id: input.tenantId,
+          incident_id: report.incident_id,
+          report_id: input.reportId,
+          report_stage: report.report_stage,
+          cyberportal_id: input.cyberportalId,
+          saved_by: actor.userId,
+        },
+        { onConflict: "incident_id,report_stage" },
+      );
+    } else {
+      update.close_override_reason = input.overrideReason;
+      await writeAuditLog({
+        tenantId: input.tenantId,
+        actorUserId: actor.userId,
+        action: "report.marked_submitted_without_reference",
+        entityType: "incident_report",
+        entityId: input.reportId,
+        reason: input.overrideReason ?? null,
+      });
+    }
+
+    // The legal deadline is marked met ONLY here, as a consequence of the
+    // recorded submission above — never independently.
     await admin
       .from("incident_deadlines")
       .update({ status: "met", met_at: new Date().toISOString() })
@@ -297,7 +339,7 @@ export async function setReportStatus(
         entityId: input.reportId,
         newValue: { stage: report.report_stage, cyberportalId: input.cyberportalId },
       });
-    } else if (input.overrideReason) {
+    } else {
       update.close_override_reason = input.overrideReason;
       await writeAuditLog({
         tenantId: input.tenantId,
@@ -305,12 +347,8 @@ export async function setReportStatus(
         action: "report.closed_without_cyberportal_id",
         entityType: "incident_report",
         entityId: input.reportId,
-        reason: input.overrideReason,
+        reason: input.overrideReason ?? null,
       });
-    } else {
-      throw new Error(
-        "Cyberportalen-ID krävs. Ange ID eller en uttrycklig motivering för att stänga utan ID.",
-      );
     }
   }
 

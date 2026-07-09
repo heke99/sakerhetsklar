@@ -260,14 +260,58 @@ export function ReportEditor({
           >
             2. Godkänn (juridik/ledning)
           </Button>
-          <Button
-            variant="outline"
-            disabled={busy || status !== "approved"}
-            onClick={() => setStatus("submitted_in_cyberportalen")}
-          >
-            3. Markera som inskickad i Cyberportalen
-          </Button>
         </div>
+
+        {status === "approved" ? (
+          <div className="mt-4 space-y-3 border-t pt-4">
+            <h3 className="text-sm font-semibold">3. Markera som inskickad i Cyberportalen</h3>
+            <p className="text-sm text-muted-foreground">
+              Inskickning kräver inlämningsreferens (Cyberportalen-ID) eller en
+              dokumenterad motivering för undantag (ex. reservförfarande).
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="submit-cp-id">Cyberportalen-ID</Label>
+                <Input
+                  id="submit-cp-id"
+                  value={cpId}
+                  onChange={(e) => setCpId(e.target.value)}
+                  placeholder="ex. CP-2026-12345"
+                />
+              </div>
+              <Button
+                disabled={busy || !cpId}
+                onClick={() =>
+                  setStatus("submitted_in_cyberportalen", { cyberportalId: cpId })
+                }
+              >
+                Markera som inskickad
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-64 space-y-1.5">
+                <Label htmlFor="submit-override">
+                  Eller markera utan referens (motivering krävs)
+                </Label>
+                <Input
+                  id="submit-override"
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  placeholder="Motivering, ex. reservförfarande via rekommenderat brev"
+                />
+              </div>
+              <Button
+                variant="destructive"
+                disabled={busy || overrideReason.length < 10}
+                onClick={() =>
+                  setStatus("submitted_in_cyberportalen", { overrideReason })
+                }
+              >
+                Markera utan referens
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {status === "submitted_in_cyberportalen" || status === "cyberportal_incident_id_saved" ? (
           <div className="mt-4 space-y-3 border-t pt-4">
