@@ -179,6 +179,20 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 18 — Backup, restore, retention and data exit
+
+### Operational hooks
+
+- New `DELETE /api/v1/tenants/[id]`: platform owner only, requires typing the exact tenant name + a ≥10-char reason, **blocked with 409 while active legal holds exist**, soft-deletes (recoverable until manual purge per exit plan), audited as `tenant.deleted` with reason. Documented in OpenAPI + contract-tested.
+- Legal-hold deletion blocking at the DB level was delivered in Batch 10 (migration 0023 triggers) — referenced here as the enforcement backbone.
+- Tenant export verified: the supervisory package ZIP contains 20 structured JSON sections + an evidence manifest with SHA-256 hashes; support-access without `allow_export` is denied and logged.
+
+### Documentation
+
+New `docs/runbooks/data-lifecycle.md` ties the technical controls to operations: suspension, deliberate deletion flow, legal hold (API + trigger layers), retention (never deletes held evidence; audit-log retention separated), exit package contents and the **Model A/B/C responsibility matrix** (backup, retention runs, purge). Existing `backup-restore.md` (PITR, quarterly restore tests with hash verification) and `exit-plan/export-and-deletion.md` confirmed accurate; subprocessor list and DPA/PUB appendix already ship in the procurement package.
+
+---
+
 ## Batch 17 — Observability, health checks and operational readiness
 
 ### Endpoints

@@ -135,3 +135,78 @@ export const PATCH = withApi<{ id: string }>(async (req, { actor, params }) => {
 
   return ok(data);
 });
+
+const deleteSchema = z.object({
+  /** Must exactly match the tenant name — deliberate-intent confirmation. */
+  confirmName: z.string().min(1),
+  reason: z.string().min(10).max(2000),
+});
+
+/**
+ * Tenant deletion (soft delete). Deliberate and audited:
+ * - platform_owner only,
+ * - requires typing the exact tenant name + a documented reason,
+ * - BLOCKED while the tenant has active legal holds,
+ * - data remains recoverable until purged per the retention runbook.
+ */
+export const DELETE = withApi<{ id: string }>(async (req, { actor, params }) => {
+  if (!hasPlatformRole(actor, ["platform_owner"])) {
+    throw forbidden("Only the platform owner can delete tenants");
+  }
+  const input = await parseBody(req, deleteSchema);
+
+  const admin = getAdminClient();
+  const { data: tenant } = await admin
+    .from("tenants")
+    .select("id, name, status")
+    .eq("id", params.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!tenant) throw notFound("Tenant not found");
+
+  if (input.confirmName !== tenant.name) {
+    throw new ApiError(
+      422,
+      "Bekräftelsen matchar inte organisationens namn.",
+      "confirmation_mismatch",
+    );
+  }
+
+  const { count: activeHolds } = await admin
+    .from("legal_holds")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", params.id)
+    .eq("status", "active");
+  if ((activeHolds ?? 0) > 0) {
+    throw new ApiError(
+      409,
+      `Organisationen har ${activeHolds} aktiv(a) legal hold(s). Radering är blockerad tills alla legal holds har släppts.`,
+      "legal_hold_active",
+    );
+  }
+
+  const { data, error } = await admin
+    .from("tenants")
+    .update({
+      deleted_at: new Date().toISOString(),
+      status: "disabled",
+      updated_by: actor.userId,
+    })
+    .eq("id", params.id)
+    .select("id, name, deleted_at")
+    .single();
+  if (error) throw new Error(error.message);
+
+  await writeAuditLog({
+    tenantId: params.id,
+    actorUserId: actor.userId,
+    action: "tenant.deleted",
+    entityType: "tenant",
+    entityId: params.id,
+    previousValue: { name: tenant.name, status: tenant.status },
+    newValue: { deletedAt: data.deleted_at },
+    reason: input.reason,
+  });
+
+  return ok(data);
+});

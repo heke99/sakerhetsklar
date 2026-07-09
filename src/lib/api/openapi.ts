@@ -65,6 +65,7 @@ export const openApiDoc = {
     "/tenants/{id}": {
       get: { summary: "Tenant detail", responses: { "200": { description: "Tenant" } } },
       patch: { summary: "Update tenant (plan/status/deployment via platform)", responses: { "200": { description: "Updated" } } },
+      delete: { summary: "Soft-delete tenant (platform owner; name confirmation + reason; blocked by active legal holds)", responses: { "200": { description: "Deleted" }, "409": { description: "Legal hold active" } } },
     },
     "/tenants/{id}/invitations": {
       get: { summary: "List invitations", responses: { "200": { description: "Invitations" } } },
