@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
+import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
@@ -45,6 +46,9 @@ export default async function LateReportingPage({
         title={`Sen rapportering — ${incident.reference}`}
         description="En rapporteringsdeadline har missats. Dokumentera orsaker, skapa förklaringsutkast och låt ledningen godkänna. Försenad rapportering kan utgöra en allvarlig överträdelse och medföra tillsynsåtgärder — dokumentationen nedan är en del av åtgärdsplanen."
       />
+      <div className="mb-6">
+        <DecisionSupportDisclaimer />
+      </div>
 
       {(recordsRes.data ?? []).length === 0 ? (
         <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">

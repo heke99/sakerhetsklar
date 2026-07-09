@@ -179,6 +179,26 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 7 — Rule engine and legal source management
+
+### Source verification (data-driven, versioned)
+
+- Migration `0020_rule_verification.sql`: `last_verified_at`, `verified_by`, `source_note` on `regulatory_rule_sets` + `regulatory_rules`; `last_verified_at`/`verified_by` on `legal_sources`.
+- Seed `0013_seed_source_verification.sql`: official source URLs and verification stamps, **verified against official sources on 2026-07-09**: Cybersäkerhetslag (2025:1506) and Cybersäkerhetsförordning (2025:1507) via riksdagen.se (in force 2026-01-15, ordinance amended t.o.m. SFS 2026:623); MCFFS 2026:8 via mcf.se (in force 2026-07-01, reporting via cyberportalen to NCSC/CERT-SE). **Correction found during verification**: the MCFFS series is issued by Myndigheten för civilt försvar (MCF), not MSB — publisher fixed in seed. EU 2024/2690, GDPR and eIDAS linked to EUR-Lex. MCFFS 2026:11/2026:12 remain `pending` until guidance exists; PTS track remains draft/partial with mandatory manual review.
+
+### De-hardcoded frontend legal copy
+
+- GDPR track page: the "72 timmar" description now comes from the `regulatory_tracks` registry (GDPR_IMY row) with a cautious fallback that points to the rule profile instead of asserting a deadline.
+- Controls page: the "MCFFS 2026:11 träder i kraft 1 oktober 2026" line is now rendered from `regulatory_rule_sets.effective_from`/`status` — it disappears automatically when the rule set becomes active.
+- Both pages also moved their tenant queries onto the data-plane client.
+- Decision documented: `deriveRulePackages` remains TS orchestration, but all package **content** (status, coverage, version, effectivity) is read from the DB when packages are assigned and displayed; the mapping itself is code-reviewed logic covered by unit tests. Engines already return `manual_review_required`/confidence and matched rules with legal references.
+
+### Disclaimer coverage
+
+`DecisionSupportDisclaimer` added to late-reporting, war-room, recipients, incidents list, reports list and management pages; a short disclaimer line added to the login card. All assessment-adjacent screens now carry it.
+
+---
+
 ## Batch 6 — Model A/B/C data-plane architecture (P0)
 
 ### Abstraction

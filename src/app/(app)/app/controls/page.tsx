@@ -5,7 +5,10 @@ import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Progress } from "@/components/ui/progress";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 import {
   computeDataQualityWarnings,
   computeReadiness,
@@ -24,8 +27,9 @@ export default async function ControlsPage() {
 
   await ensureControlsInstantiated(tenant.id);
 
-  const admin = getAdminClient();
-  const [controlsRes, readiness, warnings] = await Promise.all([
+  const admin = await getTenantDataPlaneClient(tenant.id);
+  const control = getTenantControlPlaneClient();
+  const [controlsRes, readiness, warnings, pendingRuleSetRes] = await Promise.all([
     admin
       .from("controls")
       .select("*")
@@ -34,7 +38,20 @@ export default async function ControlsPage() {
       .order("code"),
     computeReadiness(tenant.id),
     computeDataQualityWarnings(tenant.id),
+    // Data-driven legal status: upcoming control regulations come from the
+    // versioned rule registry, never hardcoded frontend copy.
+    control
+      .from("regulatory_rule_sets")
+      .select("code, name_sv, status, effective_from")
+      .eq("code", "MCFFS_2026_11")
+      .maybeSingle(),
   ]);
+
+  const pendingRuleSet = pendingRuleSetRes.data;
+  const pendingNote =
+    pendingRuleSet && pendingRuleSet.status !== "active" && pendingRuleSet.effective_from
+      ? ` Kontroller enligt ${pendingRuleSet.code.replace(/_/g, " ")} träder i kraft ${new Date(pendingRuleSet.effective_from).toLocaleDateString("sv-SE")}.`
+      : "";
 
   const scores = [
     { label: "NIS2-readiness", value: readiness.nis2Readiness },
@@ -49,7 +66,7 @@ export default async function ControlsPage() {
     <main className="p-8">
       <PageHeader
         title="Kontroller och readiness"
-        description="NIS2-kontrollbibliotek med status, ägare, bevis och deadlines. Kontroller enligt MCFFS 2026:11 träder i kraft 1 oktober 2026."
+        description={`NIS2-kontrollbibliotek med status, ägare, bevis och deadlines.${pendingNote}`}
       />
       <div className="mb-6">
         <DecisionSupportDisclaimer />

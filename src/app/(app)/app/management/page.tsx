@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
+import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Progress } from "@/components/ui/progress";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
@@ -100,6 +101,9 @@ export default async function ManagementPage() {
           </div>
         }
       />
+      <div className="mb-6">
+        <DecisionSupportDisclaimer />
+      </div>
 
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         {scoreCards.map((s) => (

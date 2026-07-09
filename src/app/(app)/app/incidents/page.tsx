@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
+import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge, type StatusColor } from "@/components/app/status-badge";
 import {
   Table,
@@ -87,6 +88,9 @@ export default async function IncidentsPage() {
         title="Incidenter"
         description="Operativ incidenthantering: tidslinje, påverkan, bedömning och rapportering."
       />
+      <div className="mb-6">
+        <DecisionSupportDisclaimer />
+      </div>
 
       <div className="mb-8 rounded-xl border bg-card">
         <Table>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
+import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge } from "@/components/app/status-badge";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
 import { getAdminClient } from "@/lib/server/supabase-admin";
@@ -69,6 +70,9 @@ export default async function WarRoomPage({
           </div>
         }
       />
+      <div className="mb-6">
+        <DecisionSupportDisclaimer />
+      </div>
 
       <WarRoomPanel
         tenantId={tenant.id}

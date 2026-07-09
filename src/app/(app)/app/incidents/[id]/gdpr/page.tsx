@@ -4,7 +4,10 @@ import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
 import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
-import { getAdminClient } from "@/lib/server/supabase-admin";
+import {
+  getTenantControlPlaneClient,
+  getTenantDataPlaneClient,
+} from "@/lib/server/data-plane";
 
 import { GdprForm } from "./gdpr-form";
 
@@ -21,8 +24,9 @@ export default async function GdprTrackPage({
   const { tenant } = current;
   const { id } = await params;
 
-  const admin = getAdminClient();
-  const [incidentRes, assessmentRes] = await Promise.all([
+  const admin = await getTenantDataPlaneClient(tenant.id);
+  const control = getTenantControlPlaneClient();
+  const [incidentRes, assessmentRes, trackRes] = await Promise.all([
     admin
       .from("incidents")
       .select("id, reference, title")
@@ -33,17 +37,29 @@ export default async function GdprTrackPage({
       .from("incident_personal_data_assessments")
       .select("*")
       .eq("incident_id", id)
+      .eq("tenant_id", tenant.id)
+      .maybeSingle(),
+    // Legal description is data-driven: the GDPR/IMY track text (incl. the
+    // 72-hour rule) comes from the versioned rule registry, not the frontend.
+    control
+      .from("regulatory_tracks")
+      .select("description_sv, authority")
+      .eq("code", "GDPR_IMY")
       .maybeSingle(),
   ]);
 
   const incident = incidentRes.data;
   if (!incident) notFound();
 
+  const trackDescription =
+    trackRes.data?.description_sv ??
+    "Personuppgiftsincidentbedömning enligt GDPR. Tidsfrister avgörs av regelverket — kontrollera regelprofilen.";
+
   return (
     <main className="p-8">
       <PageHeader
         title={`GDPR-spår — ${incident.reference}`}
-        description="Personuppgiftsincidentbedömning enligt GDPR. Anmälan till IMY görs normalt inom 72 timmar från kännedom om anmälningspliktig incident. GDPR-bedömningen är separat från NIS2-rapporteringen."
+        description={`${trackDescription} GDPR-bedömningen är separat från NIS2-rapporteringen.`}
       />
       <div className="mb-6">
         <DecisionSupportDisclaimer />

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
+import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge } from "@/components/app/status-badge";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
 import { getAdminClient } from "@/lib/server/supabase-admin";
@@ -53,6 +54,9 @@ export default async function RecipientNotificationPage({
         title={`Informationsskyldighet till mottagare — ${incident.reference}`}
         description="Vid betydande incidenter som påverkar externa tjänster ska mottagare/kunder informeras om påverkan och åtgärder — om inte information just nu försvårar incidenthanteringen. Alla beslut kräver motivering och godkännare."
       />
+      <div className="mb-6">
+        <DecisionSupportDisclaimer />
+      </div>
 
       <div className="grid gap-8 lg:grid-cols-2">
         <RecipientDecisionForm tenantId={tenant.id} incidentId={incident.id} />

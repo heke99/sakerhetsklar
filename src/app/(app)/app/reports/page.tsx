@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
+import { DecisionSupportDisclaimer } from "@/components/app/disclaimer";
 import { StatusBadge, type StatusColor } from "@/components/app/status-badge";
 import {
   Table,
@@ -55,6 +56,9 @@ export default async function ReportsPage() {
         title="Rapporter"
         description="Alla rapportutkast och inskickade rapporter per incident och rapportsteg."
       />
+      <div className="mb-6">
+        <DecisionSupportDisclaimer />
+      </div>
 
       <div className="rounded-xl border bg-card">
         <Table>

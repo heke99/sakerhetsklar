@@ -86,7 +86,12 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="mt-6 flex items-center justify-between text-sm text-slate-400">
+          <p className="mt-6 text-center text-xs leading-5 text-slate-500">
+            Säkerhetsklar tillhandahåller beslutsstöd. Det slutliga juridiska och
+            regulatoriska ansvaret ligger kvar hos organisationen.
+          </p>
+
+          <div className="mt-4 flex items-center justify-between text-sm text-slate-400">
             <Link href="/" className="transition hover:text-white">
               Till startsidan
             </Link>
