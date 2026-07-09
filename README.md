@@ -34,9 +34,11 @@ with the organization.
 
 ## Getting started
 
+The project uses **npm** with `package-lock.json` as the single source of truth.
+
 ```bash
-pnpm install
-pnpm dev
+npm ci
+npm run dev
 ```
 
 Environment variables (see `.env.example`):
@@ -56,11 +58,12 @@ Seed data (no real PII) lives in `supabase/seed`.
 
 ## Scripts
 
-- `pnpm dev` — development server.
-- `pnpm build` — production build.
-- `pnpm lint` — lint.
-- `pnpm typecheck` — strict TypeScript check.
-- `pnpm test` — run tests.
+- `npm run dev` — development server.
+- `npm run build` — production build (no network access required; system font stack).
+- `npm run lint` — lint.
+- `npm run typecheck` — strict TypeScript check.
+- `npm run test` — run unit tests (Vitest).
+- `npm run db:test` — run database migration + RLS tests against a local Postgres (see `scripts/db-test.sh`).
 
 ## Documentation
 

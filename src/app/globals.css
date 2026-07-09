@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
 :root {
+  /* System font stack: no network dependency at build or runtime. */
+  --font-geist-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
   --background: #f8fafc;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -94,7 +99,7 @@ body {
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans);
   text-rendering: optimizeLegibility;
 }
 

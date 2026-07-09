@@ -2,12 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 /**
- * Middleware: refreshes the Supabase auth session cookie and gates the
- * authenticated areas. Tenant resolution by host happens in the server-side
- * service layer (see src/lib/tenant-resolver) — the middleware only handles
- * session plumbing so it stays fast and secret-free.
+ * Proxy (Next.js 16 replacement for the deprecated middleware convention):
+ * refreshes the Supabase auth session cookie and gates the authenticated
+ * areas. Tenant resolution by host happens in the server-side service layer
+ * (see src/lib/tenant-resolver) — the proxy only handles session plumbing so
+ * it stays fast and secret-free.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

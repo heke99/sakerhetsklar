@@ -7,23 +7,25 @@ import JSZip from "jszip";
 
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
-const DOC_FILES: { zipPath: string; repoPath: string }[] = [
-  { zipPath: "sakerhetsbilaga.md", repoPath: "docs/procurement/security-appendix.md" },
-  { zipPath: "pub-dpa-bilaga.md", repoPath: "docs/procurement/dpa-pub-appendix.md" },
-  { zipPath: "underbitraden.md", repoPath: "docs/procurement/subprocessors.md" },
-  { zipPath: "dataresidens.md", repoPath: "docs/procurement/data-residency.md" },
-  { zipPath: "tredjelandsoverforing.md", repoPath: "docs/procurement/third-country-transfer.md" },
-  { zipPath: "kryptering-nyckelhantering.md", repoPath: "docs/security/encryption-key-management.md" },
-  { zipPath: "supportatkomst.md", repoPath: "docs/security/support-access.md" },
-  { zipPath: "break-glass.md", repoPath: "docs/security/break-glass.md" },
-  { zipPath: "anomalidetektering.md", repoPath: "docs/security/anomaly-detection.md" },
-  { zipPath: "driftmodell-b-single-tenant.md", repoPath: "docs/deployment/model-b-single-tenant.md" },
-  { zipPath: "driftmodell-c-kundagd.md", repoPath: "docs/deployment/model-c-customer-owned-data-plane.md" },
-  { zipPath: "exit-export-radering.md", repoPath: "docs/exit-plan/export-and-deletion.md" },
-  { zipPath: "retentionpolicy.md", repoPath: "docs/gdpr/retention-policy.md" },
-  { zipPath: "tillganglighetsredogorelse-mall.md", repoPath: "docs/accessibility/accessibility-statement-template.md" },
-  { zipPath: "runbook-plattformsincidenter.md", repoPath: "docs/runbooks/platform-incident-response.md" },
-  { zipPath: "runbook-backup-restore.md", repoPath: "docs/runbooks/backup-restore.md" },
+// Paths are relative to the repository docs/ folder; the join below is
+// statically scoped to that subfolder so build tracing stays bounded.
+const DOC_FILES: { zipPath: string; docsPath: string }[] = [
+  { zipPath: "sakerhetsbilaga.md", docsPath: "procurement/security-appendix.md" },
+  { zipPath: "pub-dpa-bilaga.md", docsPath: "procurement/dpa-pub-appendix.md" },
+  { zipPath: "underbitraden.md", docsPath: "procurement/subprocessors.md" },
+  { zipPath: "dataresidens.md", docsPath: "procurement/data-residency.md" },
+  { zipPath: "tredjelandsoverforing.md", docsPath: "procurement/third-country-transfer.md" },
+  { zipPath: "kryptering-nyckelhantering.md", docsPath: "security/encryption-key-management.md" },
+  { zipPath: "supportatkomst.md", docsPath: "security/support-access.md" },
+  { zipPath: "break-glass.md", docsPath: "security/break-glass.md" },
+  { zipPath: "anomalidetektering.md", docsPath: "security/anomaly-detection.md" },
+  { zipPath: "driftmodell-b-single-tenant.md", docsPath: "deployment/model-b-single-tenant.md" },
+  { zipPath: "driftmodell-c-kundagd.md", docsPath: "deployment/model-c-customer-owned-data-plane.md" },
+  { zipPath: "exit-export-radering.md", docsPath: "exit-plan/export-and-deletion.md" },
+  { zipPath: "retentionpolicy.md", docsPath: "gdpr/retention-policy.md" },
+  { zipPath: "tillganglighetsredogorelse-mall.md", docsPath: "accessibility/accessibility-statement-template.md" },
+  { zipPath: "runbook-plattformsincidenter.md", docsPath: "runbooks/platform-incident-response.md" },
+  { zipPath: "runbook-backup-restore.md", docsPath: "runbooks/backup-restore.md" },
 ];
 
 const MODEL_LABELS: Record<string, string> = {
@@ -64,13 +66,14 @@ export async function buildProcurementPackage(tenantId: string): Promise<{
   const tenant = tenantRes.data;
   const model = tenant?.deployment_model ?? "multi_tenant";
 
-  // Static documentation from the repository.
+  // Static documentation from the repository (scoped to docs/).
+  const docsRoot = join(process.cwd(), "docs");
   for (const doc of DOC_FILES) {
     try {
-      const content = await readFile(join(process.cwd(), doc.repoPath), "utf8");
+      const content = await readFile(join(docsRoot, doc.docsPath), "utf8");
       zip.file(doc.zipPath, content);
     } catch {
-      zip.file(doc.zipPath, `Dokumentet ${doc.repoPath} saknas i denna build.\n`);
+      zip.file(doc.zipPath, `Dokumentet docs/${doc.docsPath} saknas i denna build.\n`);
     }
   }
 
