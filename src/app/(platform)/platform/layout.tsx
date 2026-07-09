@@ -56,12 +56,20 @@ export default function PlatformLayout({
 }) {
   return (
     <div className="flex min-h-screen">
+      <a
+        href="#content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      >
+        Skip to content
+      </a>
       <SidebarNav
         sections={sections}
         brand="Säkerhetsklar Platform"
         brandHref="/platform"
       />
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div id="content" className="flex min-w-0 flex-1 flex-col">
+        {children}
+      </div>
     </div>
   );
 }

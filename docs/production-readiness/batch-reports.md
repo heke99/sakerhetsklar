@@ -179,6 +179,23 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 19 — Accessibility, public sector quality and UX hardening
+
+### Changes
+
+- **Skip links** ("Hoppa till innehåll"/"Skip to content") added to both tenant and platform layouts, targeting the main content region.
+- **Print/export-friendly pages**: `@media print` rules hide navigation chrome and normalize colors so report pages print cleanly.
+- **Destructive-action confirmations** completed: break-glass session end now confirms (member deactivation, invitation revocation, tenant suspend/delete already confirm from earlier batches; tenant deletion requires typing the exact name).
+
+### Verified existing state (audit)
+
+- Buttons/inputs have consistent `focus-visible` rings (shadcn base); sidebar uses `nav aria-label` + `aria-current="page"`; onboarding wizard steps use `aria-current="step"`, `role`d alerts/status messages exist on all new client forms (`role="alert"`/`role="status"`).
+- Status is never conveyed by color alone — every `StatusBadge` carries a Swedish text label (Batch 12).
+- All form fields introduced in batches 4–15 have explicit `<Label htmlFor>`, help texts and Swedish validation messages; Swedish date/time formatting (`sv-SE`) is used consistently.
+- `<html lang="sv">`; loading states expose `aria-busy` + `sr-only` text (Batch 12).
+
+---
+
 ## Batch 18 — Backup, restore, retention and data exit
 
 ### Operational hooks

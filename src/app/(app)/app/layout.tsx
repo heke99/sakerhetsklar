@@ -73,8 +73,16 @@ export default async function TenantAppLayout({
 
   return (
     <div className="flex min-h-screen">
+      <a
+        href="#innehall"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      >
+        Hoppa till innehåll
+      </a>
       <SidebarNav sections={sections} brand="Säkerhetsklar" brandHref="/app/overview" />
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div id="innehall" className="flex min-w-0 flex-1 flex-col">
+        {children}
+      </div>
     </div>
   );
 }

@@ -103,6 +103,22 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Print/export-friendly pages: hide navigation chrome, keep content. */
+@media print {
+  aside,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  main {
+    padding: 0 !important;
+  }
+}
+
 button,
 a,
 input,

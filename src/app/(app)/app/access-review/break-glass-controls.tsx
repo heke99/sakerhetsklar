@@ -51,6 +51,9 @@ export function BreakGlassControls({
   }
 
   async function end(sessionId: string) {
+    if (!window.confirm("Avsluta break-glass-sessionen? Åtgärden loggas.")) {
+      return;
+    }
     setBusy(true);
     try {
       await fetch("/api/v1/security/break-glass", {
