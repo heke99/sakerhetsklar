@@ -10,6 +10,7 @@ const sections: NavSection[] = [
     items: [
       { href: "/app/overview", label: "Översikt" },
       { href: "/app/onboarding", label: "Kom igång" },
+      { href: "/app/notifications", label: "Notiser" },
     ],
   },
   {

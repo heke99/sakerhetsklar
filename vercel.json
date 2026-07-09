@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/v1/jobs/escalations", "schedule": "*/15 * * * *" },
+    { "path": "/api/v1/jobs/webhooks", "schedule": "*/5 * * * *" },
+    { "path": "/api/v1/jobs/anomaly-scan", "schedule": "0 * * * *" }
+  ]
+}

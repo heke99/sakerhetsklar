@@ -4,6 +4,7 @@ import { getTenantDataPlaneClient } from "@/lib/server/data-plane";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { assertAllTenantEntities } from "@/lib/authz/tenant-guards";
+import { notifyTenantEvent } from "@/lib/services/notify";
 
 export interface CreateIncidentInput {
   tenantId: string;
@@ -116,6 +117,18 @@ export async function createIncident(actor: ActorContext, input: CreateIncidentI
     entityType: "incident",
     entityId: incident.id,
     newValue: { reference, title: input.title, severity: input.severity },
+  });
+
+  await notifyTenantEvent({
+    tenantId: input.tenantId,
+    eventType: "incident.created",
+    title: `Ny incident: ${reference}`,
+    body: `${input.title} (allvarlighetsgrad: ${input.severity}).`,
+    severity: input.severity === "critical" || input.severity === "high" ? "critical" : "warning",
+    linkPath: `/app/incidents/${incident.id}`,
+    entityType: "incident",
+    entityId: incident.id,
+    webhookPayload: { incidentId: incident.id, reference, severity: input.severity },
   });
 
   return incident;

@@ -179,6 +179,51 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 13 — Jobs, notifications, escalation and schedulers
+
+### Scheduling
+
+- `vercel.json` cron config: escalations every 15 min, webhook delivery every 5 min, anomaly scan hourly. Alternative schedulers documented (any runner that sends the secret).
+- New shared `src/lib/server/job-auth.ts`: timing-safe comparison, accepts `x-job-secret` **or** `Authorization: Bearer` (Vercel Cron `CRON_SECRET` convention). Fail closed when `JOB_RUNNER_SECRET` unset. All three job routes refactored to use it.
+
+### Notification fan-out (previously dead code)
+
+New `src/lib/services/notify.ts`: role-resolved in-app notifications + HMAC-signed webhook enqueue + Teams (per-tenant integration) + e-mail (when Resend configured), best-effort with logging. Wired to domain events:
+
+- `incident.created` → notify tenant_admin/ciso/incident_manager + webhook payload with incident metadata.
+- `report.approved` / `report.submitted` → notify + webhook (submission reference included when present).
+- Deadline escalations already create in-app notifications via the escalation job (verified; late deadlines create records + remediation tasks idempotently).
+
+### In-app inbox
+
+New `/app/notifications` page (severity badges, mark-all-read, per-notification open-and-mark-read) + self-scoped `GET/PATCH /api/v1/notifications` (user can only ever see/modify their own rows). Added to the tenant navigation.
+
+### Tests
+
+`job-auth.test.ts` — fail-closed without secret, wrong secret rejected, both header conventions accepted. 134 unit tests green.
+
+---
+
+## Batch 12 — Tenant UI polish and complete customer workflow
+
+### Swedish labels
+
+New shared label module `src/lib/labels/sv.ts` (incident status, severity, report status, significance, plan, risk, task, classification, support, exercise, deadline, onboarding) with `svLabel()` fallback. Applied to incidents list/detail, reports list, report editor status, risks, exercises, evidence classifications, settings plan (Batch 4), support-access statuses (Batch 11). "War room" renamed to **"Krisrum"** across the tenant UI.
+
+### Landing page
+
+Removed all "demoöversikt"/"kundvy" demo framing — CTAs now point at login or the feature section; the hero dashboard mock is explicitly labeled "Exempelvy (illustration)".
+
+### Loading/error states
+
+Route-level `loading.tsx` (skeletons, `aria-busy`) and `error.tsx` (Swedish/English per surface, digest reference, retry button) for both `/app` and `/platform` segments — no more blank full-page waits or unhandled render errors.
+
+### Silent failure fixes
+
+`control-row.tsx` now surfaces API errors with `role="alert"` instead of swallowing failed PATCHes (pattern already followed by the newer client components from Batches 4–11).
+
+---
+
 ## Batch 11 — Platform admin / superadmin production UI
 
 ### New write surfaces (all audited server-side)

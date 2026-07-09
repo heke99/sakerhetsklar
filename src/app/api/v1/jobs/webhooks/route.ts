@@ -1,12 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { optionalEnv } from "@/lib/server/env";
+import { isAuthorizedJobRequest } from "@/lib/server/job-auth";
 import { processWebhookDeliveries } from "@/lib/services/webhooks";
 
 /** Webhook delivery job with retry logic. Protected by the job secret. */
 export async function POST(req: NextRequest) {
-  const secret = optionalEnv("JOB_RUNNER_SECRET");
-  if (!secret || req.headers.get("x-job-secret") !== secret) {
+  if (!isAuthorizedJobRequest(req)) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Invalid job secret" } },
       { status: 401 },

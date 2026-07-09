@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { optionalEnv } from "@/lib/server/env";
+import { isAuthorizedJobRequest } from "@/lib/server/job-auth";
 import { processDeadlineEscalations } from "@/lib/services/deadlines";
 
 /**
@@ -9,9 +9,7 @@ import { processDeadlineEscalations } from "@/lib/services/deadlines";
  * with the shared job secret — never exposed to browsers.
  */
 export async function POST(req: NextRequest) {
-  const secret = optionalEnv("JOB_RUNNER_SECRET");
-  const provided = req.headers.get("x-job-secret");
-  if (!secret || provided !== secret) {
+  if (!isAuthorizedJobRequest(req)) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Invalid job secret" } },
       { status: 401 },

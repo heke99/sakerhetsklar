@@ -8,6 +8,7 @@ import { writeAuditLog } from "@/lib/audit/log";
 import type { ActorContext } from "@/lib/authz/context";
 import { assertTenantEntity } from "@/lib/authz/tenant-guards";
 import { validateReportTransition } from "@/lib/reports/transitions";
+import { notifyTenantEvent } from "@/lib/services/notify";
 
 export type ReportStage =
   | "early_warning_24h"
@@ -374,6 +375,32 @@ export async function setReportStatus(
     previousValue: { status: report.status },
     newValue: { status: input.status },
   });
+
+  if (input.status === "submitted_in_cyberportalen" || input.status === "approved") {
+    await notifyTenantEvent({
+      tenantId: input.tenantId,
+      eventType:
+        input.status === "approved" ? "report.approved" : "report.submitted",
+      title:
+        input.status === "approved"
+          ? `Rapport godkänd: ${stageTitle(report.report_stage as ReportStage)}`
+          : `Rapport markerad som inskickad: ${stageTitle(report.report_stage as ReportStage)}`,
+      body:
+        input.status === "approved"
+          ? "Rapporten är godkänd och kan skickas in."
+          : `Rapporten är markerad som inskickad${input.cyberportalId ? ` (referens ${input.cyberportalId})` : " (utan referens — undantag dokumenterat)"}.`,
+      severity: "info",
+      linkPath: `/app/reports/${input.reportId}`,
+      entityType: "incident_report",
+      entityId: input.reportId,
+      webhookPayload: {
+        reportId: input.reportId,
+        incidentId: report.incident_id,
+        stage: report.report_stage,
+        status: input.status,
+      },
+    });
+  }
 
   return data;
 }

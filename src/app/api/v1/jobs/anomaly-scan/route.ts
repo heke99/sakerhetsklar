@@ -1,13 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { optionalEnv } from "@/lib/server/env";
+import { isAuthorizedJobRequest } from "@/lib/server/job-auth";
 import { runAnomalyScan } from "@/lib/services/security";
 
 /** Scheduled anomaly scan (spec §38). Protected by the job runner secret. */
 export async function POST(req: NextRequest) {
-  const secret = optionalEnv("JOB_RUNNER_SECRET");
-  const provided = req.headers.get("x-job-secret");
-  if (!secret || provided !== secret) {
+  if (!isAuthorizedJobRequest(req)) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Invalid job secret" } },
       { status: 401 },
