@@ -179,6 +179,26 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 11 — Platform admin / superadmin production UI
+
+### New write surfaces (all audited server-side)
+
+- **Tenant list** (`/platform/tenants`): "Create tenant" form (from Batch 4).
+- **Tenant profile** (`/platform/tenants/[id]`), new "Management" section:
+  - Plan assignment (starter/business/enterprise).
+  - Status: activate / pause / suspend with confirmation dialogs.
+  - Deployment model selection with explicit fail-closed messaging — Model B/C changes are rejected by the API (409) unless a provisioned active data-plane connection exists.
+  - **Request support access** form: purpose (min 10 chars), scope read-only/read-write, duration ≤ 72h, include-evidence and allow-export flags. Requires tenant approval.
+- **Invitations section** (from Batch 4): invite first tenant admin, resend, revoke; member count in overview.
+
+### Tenant-side support access workflow
+
+`/app/access-review` now has approve/deny buttons for `requested` grants and revoke (reason required) for `approved` grants, visible to tenant admin/CISO only. Status values display in Swedish. This closes the loop: platform requests → tenant approves → scoped, logged access → tenant/platform revokes.
+
+With Batches 4/6/11 combined, a new customer can be onboarded entirely through the UI: create tenant → set plan → (optionally provision data plane, switch model) → invite first admin → admin accepts → onboarding wizard. No manual SQL/API calls required for production operations.
+
+---
+
 ## Batch 10 — Evidence bank, file security and chain of custody
 
 ### Support-access scope enforcement (previously dead flags)

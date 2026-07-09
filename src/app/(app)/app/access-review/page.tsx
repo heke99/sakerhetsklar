@@ -11,10 +11,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TENANT_ROLE_LABELS_SV, type TenantRole } from "@/lib/authz/roles";
+import { hasTenantRole } from "@/lib/authz/context";
 import { getCurrentTenant } from "@/lib/services/current-tenant";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { BreakGlassControls } from "./break-glass-controls";
+import {
+  SupportAccessActions,
+  supportStatusLabel,
+} from "./support-access-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Åtkomstgranskning" };
@@ -22,7 +27,8 @@ export const metadata = { title: "Åtkomstgranskning" };
 export default async function AccessReviewPage() {
   const current = await getCurrentTenant();
   if (!current) redirect("/login");
-  const { tenant } = current;
+  const { tenant, actor } = current;
+  const canDecideSupport = hasTenantRole(actor, tenant.id, ["tenant_admin", "ciso"]);
 
   const admin = getAdminClient();
   const [membersRes, assignmentsRes, breakGlassRes, anomaliesRes, supportRes] =
@@ -117,12 +123,13 @@ export default async function AccessReviewPage() {
                 <TableHead>Syfte</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Gäller till</TableHead>
+                <TableHead>Beslut</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(supportRes.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-muted-foreground">
+                  <TableCell colSpan={4} className="text-muted-foreground">
                     Inga supportåtkomstförfrågningar.
                   </TableCell>
                 </TableRow>
@@ -140,11 +147,18 @@ export default async function AccessReviewPage() {
                               : "gray"
                         }
                       >
-                        {s.status}
+                        {supportStatusLabel(s.status)}
                       </StatusBadge>
                     </TableCell>
                     <TableCell>
                       {s.expires_at ? new Date(s.expires_at).toLocaleString("sv-SE") : "–"}
+                    </TableCell>
+                    <TableCell>
+                      <SupportAccessActions
+                        requestId={s.id}
+                        status={s.status}
+                        canDecide={canDecideSupport}
+                      />
                     </TableCell>
                   </TableRow>
                 ))

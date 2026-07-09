@@ -14,6 +14,7 @@ import { requirePlatformRole } from "@/lib/services/require-platform";
 import { getAdminClient } from "@/lib/server/supabase-admin";
 
 import { TenantAdminActions } from "./tenant-admin-actions";
+import { TenantManagement } from "./tenant-management";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tenant profile" };
@@ -121,6 +122,16 @@ export default async function TenantProfilePage({
             <dd className="font-medium">{membersCountRes.count ?? 0}</dd>
           </div>
         </dl>
+      </section>
+
+      <section className="mb-8 rounded-xl border bg-card p-5">
+        <h2 className="mb-3 text-lg font-semibold">Management</h2>
+        <TenantManagement
+          tenantId={id}
+          currentPlan={tenant.plan}
+          currentStatus={tenant.status}
+          currentDeploymentModel={tenant.deployment_model}
+        />
       </section>
 
       <section className="mb-8 rounded-xl border bg-card p-5">
