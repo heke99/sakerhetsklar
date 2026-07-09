@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z, type ZodType } from "zod";
 
 import { getActorContext, type ActorContext } from "@/lib/authz/context";
+import { log } from "@/lib/server/log";
 
 export class ApiError extends Error {
   constructor(
@@ -75,7 +76,10 @@ export function withApi<P = Record<string, string>>(handler: Handler<P>) {
           { status: 422 },
         );
       }
-      console.error("api_unhandled_error", err);
+      log.error("api_unhandled_error", err, {
+        path: req.nextUrl.pathname,
+        method: req.method,
+      });
       return NextResponse.json(
         { error: { code: "internal_error", message: "Internal server error" } },
         { status: 500 },

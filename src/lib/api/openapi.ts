@@ -42,7 +42,14 @@ export const openApiDoc = {
   },
   security: [{ sessionCookie: [] }],
   paths: {
-    "/health": { get: { summary: "Service health", security: [], responses: { "200": { description: "OK" } } } },
+    "/health": { get: { summary: "Public liveness probe", security: [], responses: { "200": { description: "OK" } } } },
+    "/health/readiness": {
+      get: {
+        summary: "Operational readiness (platform admin or job secret): DB, storage, migrations, config, rule freshness, data planes",
+        security: [{ sessionCookie: [] }, { jobSecret: [] }],
+        responses: { "200": { description: "Ready/degraded" }, "503": { description: "Failed checks" } },
+      },
+    },
     "/control-plane/resolve": {
       get: {
         summary: "Resolve current host to safe tenant config (fail closed)",

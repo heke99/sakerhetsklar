@@ -179,6 +179,23 @@ New `/reset-password` (`src/app/reset-password/`): request phase (Supabase `rese
 
 ---
 
+## Batch 17 — Observability, health checks and operational readiness
+
+### Endpoints
+
+- `/api/v1/health` — public liveness only: status, service, app version, time. No dependencies probed, nothing sensitive.
+- New `/api/v1/health/readiness` — requires **platform admin session or the job secret** (external monitoring): DB connectivity, storage bucket access, migration marker (probes a column from the newest migration series), job secret/email/webhook-signing configuration presence, rule package verification freshness (degraded > 180 days), and per-tenant Model B/C data-plane readiness (count of unready planes — all fail closed). Overall status ok/degraded/failed with 503 on failure; contract-tested and documented in OpenAPI.
+
+### Structured logging
+
+New `src/lib/server/log.ts` — single-line JSON logs (`ts`, `level`, `event`, fields; never secrets/PII). Wired into the API error handler (path+method on unhandled errors) and readiness warnings. `SENTRY_DSN` remains a documented reserved variable; no mock integration was added.
+
+### Existing observability confirmed
+
+Audit viewer (`/platform/audit`, `/api/v1/audit`), tenant health page (`/platform/health` from `tenant_health_checks`/`tenant_backup_status`), integration status page, and per-domain access/export/download logs.
+
+---
+
 ## Batch 16 — CI/CD, migration tests and dependency security
 
 ### CI (`.github/workflows/ci.yml`)
